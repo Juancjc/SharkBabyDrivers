@@ -1,0 +1,308 @@
+<UserControl x:Class="SharkBabyDrivers.Views.X11View"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="clr-namespace:SharkBabyDrivers.Localization"
+             xmlns:vm="clr-namespace:SharkBabyDrivers.ViewModels"
+             xmlns:c="clr-namespace:SharkBabyDrivers.Controls"
+             xmlns:v="clr-namespace:SharkBabyDrivers.Views">
+    <UserControl.Resources>
+        <Style x:Key="Row" TargetType="DockPanel">
+            <Setter Property="Margin" Value="0,10,0,0"/>
+            <Setter Property="LastChildFill" Value="True"/>
+        </Style>
+        <Style x:Key="Value" TargetType="TextBlock" BasedOn="{StaticResource Label}">
+            <Setter Property="Width" Value="90"/>
+            <Setter Property="TextAlignment" Value="Right"/>
+            <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+    </UserControl.Resources>
+
+    <TabControl Margin="32,0,32,0" IsEnabled="{Binding IsReady}">
+        <!-- ============================== PERFORMANCE ============================== -->
+        <TabItem Header="{l:T tab_performance}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,16">
+                <StackPanel>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="{l:T dpi_title}" Style="{StaticResource H2}"/>
+                            <TextBlock Text="{l:T dpi_hint}" Style="{StaticResource Hint}" Margin="0,0,0,8"/>
+                            <ItemsControl ItemsSource="{Binding Stages}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:StageVm}">
+                                        <Grid Margin="0,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="44"/>
+                                                <ColumnDefinition Width="34"/>
+                                                <ColumnDefinition Width="96"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="92"/>
+                                                <ColumnDefinition Width="50"/>
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding Enabled}" VerticalAlignment="Center"/>
+                                            <RadioButton Grid.Column="1" Style="{StaticResource Dot}" GroupName="{Binding DataContext.Title, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                         IsChecked="{Binding IsActive, Mode=TwoWay}" IsEnabled="{Binding Enabled}" ToolTip="{l:T dpi_active}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding Name}" Style="{StaticResource Label}" Margin="4,0,0,0"/>
+                                            <Slider Grid.Column="3" Minimum="50" Maximum="22000" SmallChange="50" LargeChange="400" Value="{Binding Dpi, Delay=150}"
+                                                    IsEnabled="{Binding Enabled}" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                                            <TextBox Grid.Column="4" Text="{Binding Dpi, UpdateSourceTrigger=LostFocus}" IsEnabled="{Binding Enabled}" TextAlignment="Right"/>
+                                            <c:ColorButton Grid.Column="5" Color="{Binding Color}" HorizontalAlignment="Right" IsEnabled="{Binding Enabled}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="{l:T polling_title}" Style="{StaticResource H2}"/>
+                            <TextBlock Text="{l:T polling_hint}" Style="{StaticResource Hint}" Margin="0,0,0,10"/>
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton Style="{StaticResource Segment}" Content="125 Hz" IsChecked="{Binding PollingHz, Converter={StaticResource Eq}, ConverterParameter=125}"/>
+                                <RadioButton Style="{StaticResource Segment}" Content="250 Hz" IsChecked="{Binding PollingHz, Converter={StaticResource Eq}, ConverterParameter=250}"/>
+                                <RadioButton Style="{StaticResource Segment}" Content="500 Hz" IsChecked="{Binding PollingHz, Converter={StaticResource Eq}, ConverterParameter=500}"/>
+                                <RadioButton Style="{StaticResource Segment}" Content="1000 Hz" IsChecked="{Binding PollingHz, Converter={StaticResource Eq}, ConverterParameter=1000}"/>
+                            </StackPanel>
+                            <TextBlock Text="{l:T polling_wired_note}" Style="{StaticResource Hint}" Margin="0,8,0,0" Visibility="{Binding IsWired, Converter={StaticResource VisIf}}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="{l:T sensor_title}" Style="{StaticResource H2}"/>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding AngleSnap}"/>
+                                <StackPanel>
+                                    <TextBlock Text="{l:T angle_snap}" Style="{StaticResource Label}"/>
+                                    <TextBlock Text="{l:T angle_snap_hint}" Style="{StaticResource Hint}"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding Ripple}"/>
+                                <StackPanel>
+                                    <TextBlock Text="{l:T ripple}" Style="{StaticResource Label}"/>
+                                    <TextBlock Text="{l:T ripple_hint}" Style="{StaticResource Hint}"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <TextBlock Text="{l:T debounce}" Style="{StaticResource Label}" Margin="0,16,0,0"/>
+                            <TextBlock Text="{l:T debounce_hint}" Style="{StaticResource Hint}"/>
+                            <DockPanel Margin="0,6,0,0">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding DebounceMs, StringFormat={}{0} ms}"/>
+                                <Slider Minimum="4" Maximum="50" TickFrequency="2" IsSnapToTickEnabled="True" Value="{Binding DebounceMs}"/>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
+
+        <!-- ============================== BUTTONS ============================== -->
+        <TabItem Header="{l:T tab_buttons}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,16">
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="{l:T buttons_reset}" Command="{Binding ResetButtonsCommand}"/>
+                            <TextBlock Text="{l:T buttons_title}" Style="{StaticResource H2}"/>
+                        </DockPanel>
+                        <TextBlock Text="{l:T buttons_hint}" Style="{StaticResource Hint}" Margin="0,0,0,10"/>
+                        <ItemsControl ItemsSource="{Binding Buttons}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:ButtonVm}">
+                                    <Grid Margin="0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="260"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Name}" Style="{StaticResource Label}"/>
+                                        <ComboBox Grid.Column="1" MaxWidth="420" HorizontalAlignment="Left" MinWidth="320"
+                                                  ItemsSource="{Binding DataContext.ActionView, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                  SelectedItem="{Binding Selected, Mode=TwoWay}" DisplayMemberPath="Label">
+                                            <ComboBox.GroupStyle>
+                                                <GroupStyle>
+                                                    <GroupStyle.HeaderTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding Name}" Foreground="{StaticResource Accent}" FontSize="11.5" FontWeight="SemiBold" Margin="8,8,0,2"/>
+                                                        </DataTemplate>
+                                                    </GroupStyle.HeaderTemplate>
+                                                </GroupStyle>
+                                            </ComboBox.GroupStyle>
+                                        </ComboBox>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </ScrollViewer>
+        </TabItem>
+
+        <!-- ============================== LIGHTING ============================== -->
+        <TabItem Header="{l:T tab_lighting}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,16">
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="{l:T light_title}" Style="{StaticResource H2}"/>
+                        <TextBlock Text="{l:T light_mode}" Style="{StaticResource Label}" Margin="0,10,0,6"/>
+                        <WrapPanel>
+                            <ItemsControl ItemsSource="{Binding LightModes}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <RadioButton Style="{StaticResource Segment}" Content="{Binding Label}" Margin="0,0,6,6" GroupName="x11light"
+                                                     Command="{Binding DataContext.SetLightModeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding Value}">
+                                            <RadioButton.IsChecked>
+                                                <MultiBinding Mode="OneWay" Converter="{x:Static v:MultiEquals.Instance}">
+                                                    <Binding Path="Value"/>
+                                                    <Binding Path="DataContext.LightMode" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                                </MultiBinding>
+                                            </RadioButton.IsChecked>
+                                        </RadioButton>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </WrapPanel>
+
+                        <StackPanel Visibility="{Binding LightUsesColor, Converter={StaticResource VisIf}}" Margin="0,12,0,0">
+                            <DockPanel>
+                                <c:ColorButton DockPanel.Dock="Right" Color="{Binding LightColor}"/>
+                                <StackPanel>
+                                    <TextBlock Text="{l:T light_color}" Style="{StaticResource Label}"/>
+                                    <TextBlock Text="{l:T light_color_hint}" Style="{StaticResource Hint}"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                        <StackPanel Visibility="{Binding LightUsesBrightness, Converter={StaticResource VisIf}}" Margin="0,16,0,0">
+                            <TextBlock Text="{l:T brightness}" Style="{StaticResource Label}"/>
+                            <DockPanel Margin="0,6,0,0">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding Brightness, StringFormat={}{0} / 8}"/>
+                                <Slider Minimum="1" Maximum="8" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Brightness}"/>
+                            </DockPanel>
+                        </StackPanel>
+                        <StackPanel Visibility="{Binding LightUsesSpeed, Converter={StaticResource VisIf}}" Margin="0,16,0,0">
+                            <TextBlock Text="{l:T speed}" Style="{StaticResource Label}"/>
+                            <DockPanel Margin="0,6,0,0">
+                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding Speed, StringFormat={}{0} / 8}"/>
+                                <Slider Minimum="1" Maximum="8" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Speed}"/>
+                            </DockPanel>
+                        </StackPanel>
+                        <TextBlock Text="{l:T brightness_hint}" Style="{StaticResource Hint}" Margin="0,14,0,0"/>
+                    </StackPanel>
+                </Border>
+            </ScrollViewer>
+        </TabItem>
+
+        <!-- ============================== POWER ============================== -->
+        <TabItem Header="{l:T tab_power}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,16">
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="{l:T power_title}" Style="{StaticResource H2}"/>
+                        <TextBlock Text="{l:T sleep}" Style="{StaticResource Label}" Margin="0,12,0,0"/>
+                        <TextBlock Text="{l:T sleep_hint}" Style="{StaticResource Hint}"/>
+                        <DockPanel Margin="0,6,0,0">
+                            <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding SleepMinutes, StringFormat={}{0:0.0} min}"/>
+                            <Slider Minimum="0.5" Maximum="30" TickFrequency="0.5" IsSnapToTickEnabled="True" Value="{Binding SleepMinutes}"/>
+                        </DockPanel>
+                        <TextBlock Text="{l:T deep_sleep}" Style="{StaticResource Label}" Margin="0,18,0,0"/>
+                        <TextBlock Text="{l:T deep_sleep_hint}" Style="{StaticResource Hint}"/>
+                        <DockPanel Margin="0,6,0,0">
+                            <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding DeepSleepMinutes, StringFormat={}{0} min}"/>
+                            <Slider Minimum="1" Maximum="60" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding DeepSleepMinutes}"/>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+            </ScrollViewer>
+        </TabItem>
+
+        <!-- ============================== MACROS ============================== -->
+        <TabItem Header="{l:T tab_macros}">
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="240"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border Style="{StaticResource Card}" Margin="0,0,14,0" Padding="12">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Content="{l:T macro_new}" Command="{Binding NewMacroCommand}" Margin="0,0,6,0"/>
+                            <Button Content="{l:T delete}" Command="{Binding DeleteMacroCommand}" Style="{StaticResource DangerButton}"/>
+                        </StackPanel>
+                        <ListBox ItemsSource="{Binding Macros}" SelectedItem="{Binding SelectedMacro}" ItemContainerStyle="{StaticResource PlainItem}" DisplayMemberPath="Name"/>
+                    </DockPanel>
+                </Border>
+                <Border Grid.Column="1" Style="{StaticResource Card}">
+                    <Grid>
+                        <TextBlock Text="{l:T macro_none}" Style="{StaticResource Hint}" Visibility="{Binding SelectedMacro, Converter={StaticResource VisIfNot}}"/>
+                        <DockPanel DataContext="{Binding SelectedMacro}" Visibility="{Binding Converter={StaticResource VisIf}}">
+                            <StackPanel DockPanel.Dock="Top">
+                                <TextBlock Text="{l:T macros_hint}" Style="{StaticResource Hint}" Margin="0,0,0,10"/>
+                                <DockPanel Margin="0,0,0,8">
+                                    <TextBlock Text="{l:T name}" Style="{StaticResource Label}" Width="110"/>
+                                    <TextBox x:Name="MacroName" Text="{Binding Name, Mode=OneWay}" LostFocus="MacroName_LostFocus" MaxWidth="300" HorizontalAlignment="Left" MinWidth="220"/>
+                                </DockPanel>
+                                <DockPanel Margin="0,0,0,8">
+                                    <TextBlock Text="{l:T macro_mode}" Style="{StaticResource Label}" Width="110"/>
+                                    <TextBox DockPanel.Dock="Right" Width="70" Text="{Binding Repeat}" ToolTip="{l:T macro_repeat}"/>
+                                    <ComboBox ItemsSource="{Binding DataContext.MacroModes, RelativeSource={RelativeSource AncestorType=UserControl}}" SelectedValuePath="Value" DisplayMemberPath="Label"
+                                              SelectedValue="{Binding Mode}" Margin="0,0,10,0" MaxWidth="320" HorizontalAlignment="Left" MinWidth="220"/>
+                                </DockPanel>
+                                <WrapPanel Margin="0,4,0,10">
+                                    <ToggleButton x:Name="RecordButton" Style="{StaticResource BaseButton}" Margin="0,0,8,0" Checked="Record_Checked" Unchecked="Record_Unchecked">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Ellipse Width="10" Height="10" Fill="{StaticResource Danger}" Margin="0,0,8,0"/>
+                                            <TextBlock x:Name="RecordText" Text="{l:T macro_record}"/>
+                                        </StackPanel>
+                                    </ToggleButton>
+                                    <Button Content="{l:T macro_add_mouse}" Command="{Binding DataContext.InsertClickCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" Margin="0,0,8,0"/>
+                                    <Button Content="{l:T macro_clear}" Command="{Binding DataContext.ClearMacroCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                </WrapPanel>
+                                <Grid Margin="10,0,10,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="140"/>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="40"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{l:T macro_step_key}" Foreground="{StaticResource Muted}"/>
+                                    <TextBlock Grid.Column="1" Text="{l:T macro_step_action}" Foreground="{StaticResource Muted}"/>
+                                    <TextBlock Grid.Column="2" Text="{l:T macro_step_delay}" Foreground="{StaticResource Muted}"/>
+                                </Grid>
+                            </StackPanel>
+                            <ListBox ItemsSource="{Binding Steps}" ItemContainerStyle="{StaticResource PlainItem}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:MacroStepVm}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="120"/>
+                                                <ColumnDefinition Width="40"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding KeyName}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding ActionName}" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+                                            <TextBox Grid.Column="2" Text="{Binding DelayMs}" Width="90" HorizontalAlignment="Left"/>
+                                            <Button Grid.Column="3" Style="{StaticResource Ghost}" Command="{Binding DataContext.RemoveStepCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                                <TextBlock Text="&#xE711;" Style="{StaticResource Icon}" FontSize="12"/>
+                                            </Button>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </TabItem>
+
+        <!-- ============================== BACKUP ============================== -->
+        <TabItem Header="{l:T tab_backup}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,16">
+                <v:BackupPanel/>
+            </ScrollViewer>
+        </TabItem>
+    </TabControl>
+</UserControl>

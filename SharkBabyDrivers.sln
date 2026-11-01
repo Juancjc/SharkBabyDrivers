@@ -1,0 +1,52 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{1837A2CC-9A5D-49F3-A10D-423E8259C7A4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharkBabyDrivers.Core", "src\SharkBabyDrivers.Core\SharkBabyDrivers.Core.csproj", "{938E69BF-F2D6-4DA2-8B2E-4D7AC6D41F3B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharkBabyDrivers", "src\SharkBabyDrivers\SharkBabyDrivers.csproj", "{5CECE011-C107-4F4F-B59F-05B9F45F9FE1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{C432847A-20E0-4B9D-A2F2-9E375780AD88}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharkBabyDrivers.Tests", "tests\SharkBabyDrivers.Tests\SharkBabyDrivers.Tests.csproj", "{8DD36216-345D-4416-A7F1-416A4A6FE600}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{5D2D58F5-FA71-46E3-8587-889522327F13}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharkBabyDrivers.Cli", "tools\SharkBabyDrivers.Cli\SharkBabyDrivers.Cli.csproj", "{17595057-1E36-4E41-B991-478A90E71F41}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{938E69BF-F2D6-4DA2-8B2E-4D7AC6D41F3B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{938E69BF-F2D6-4DA2-8B2E-4D7AC6D41F3B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{938E69BF-F2D6-4DA2-8B2E-4D7AC6D41F3B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{938E69BF-F2D6-4DA2-8B2E-4D7AC6D41F3B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5CECE011-C107-4F4F-B59F-05B9F45F9FE1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5CECE011-C107-4F4F-B59F-05B9F45F9FE1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5CECE011-C107-4F4F-B59F-05B9F45F9FE1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5CECE011-C107-4F4F-B59F-05B9F45F9FE1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8DD36216-345D-4416-A7F1-416A4A6FE600}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8DD36216-345D-4416-A7F1-416A4A6FE600}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8DD36216-345D-4416-A7F1-416A4A6FE600}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8DD36216-345D-4416-A7F1-416A4A6FE600}.Release|Any CPU.Build.0 = Release|Any CPU
+		{17595057-1E36-4E41-B991-478A90E71F41}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{17595057-1E36-4E41-B991-478A90E71F41}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{17595057-1E36-4E41-B991-478A90E71F41}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{17595057-1E36-4E41-B991-478A90E71F41}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{938E69BF-F2D6-4DA2-8B2E-4D7AC6D41F3B} = {1837A2CC-9A5D-49F3-A10D-423E8259C7A4}
+		{5CECE011-C107-4F4F-B59F-05B9F45F9FE1} = {1837A2CC-9A5D-49F3-A10D-423E8259C7A4}
+		{8DD36216-345D-4416-A7F1-416A4A6FE600} = {C432847A-20E0-4B9D-A2F2-9E375780AD88}
+		{17595057-1E36-4E41-B991-478A90E71F41} = {5D2D58F5-FA71-46E3-8587-889522327F13}
+	EndGlobalSection
+EndGlobal
