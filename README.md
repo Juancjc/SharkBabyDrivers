@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="SharkBabyDrivers — mouse e teclado Attack Shark num app só" width="100%">
+  <img src="assets/icon.png" alt="SharkBabyDrivers — tubarão de chupeta vermelha" width="144">
 </p>
 
 <p align="center">
@@ -120,8 +120,19 @@ do SharkBabyDrivers pode ficar aberta por vez, para evitar disputa pelo disposit
 ```powershell
 dotnet run --project src/SharkBabyDrivers            # app
 dotnet run --project src/SharkBabyDrivers -- --demo  # + um X68 simulado para conhecer as telas
+dotnet run --project src/SharkBabyDrivers -- --preview # prévia isolada, somente simulador, sem acessar HID/SignalRGB
 dotnet test                                          # testes de protocolo e do simulador do teclado
 ```
+
+Instalar ou atualizar no próprio PC (por usuário, sem administrador), a partir do código:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\Install-Local.ps1   # publica, encerra a cópia aberta, instala e abre
+```
+
+Instala em `%LOCALAPPDATA%\Programs\SharkBabyDrivers` com atalho no Menu Iniciar e desinstalador em
+*Aplicativos instalados*. Não mexe nos dados (`%LOCALAPPDATA%\SharkBabyDrivers`), no SignalRGB nem na escolha de
+*Iniciar com o Windows* (só atualiza o caminho se já estiver ligado).
 
 Gerar um executável leve (depende do runtime, ~500 KB):
 
@@ -149,6 +160,7 @@ o controle desse dispositivo no outro app durante a configuração.
 | `src/SharkBabyDrivers.Core` | HID (P/Invoke, sem dependências), protocolos X11 e X68, backups, perfis |
 | `src/SharkBabyDrivers` | App WPF (.NET 8): tema escuro vermelho, PT-BR/EN |
 | `integrations/signalrgb` | Plugin do SignalRGB (embutido no app e instalado por ele) |
+| `tools/Install-Local.ps1` | Instalador local por usuário (publica, instala, atalhos e desinstalador) |
 | `tools/SharkBabyDrivers.Cli` | Diagnóstico: `list`, `dump`, `backup` (somente leitura) |
 | `tests/SharkBabyDrivers.Tests` | xUnit: checksums, codecs, capturas reais do X11, ciclos completos no simulador do X68 |
 | `docs/` | Protocolos documentados (engenharia reversa dos apps oficiais) |
