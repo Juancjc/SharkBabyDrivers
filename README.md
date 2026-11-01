@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/icon.png" alt="SharkBabyDrivers — tubarão de chupeta vermelha" width="144">
+  <img src="assets/banner.png" alt="SharkBabyDrivers — tubarão bebê de chupeta vermelha; mouse e teclado Attack Shark num app só" width="100%">
 </p>
 
 <p align="center">

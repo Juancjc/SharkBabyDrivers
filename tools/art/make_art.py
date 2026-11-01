@@ -1,4 +1,5 @@
-"""Generates the SharkBabyDrivers icon (PNG + multi-size ICO) and the GitHub banner.
+"""Generates the ORIGINAL (v1.0–1.2) SharkBabyDrivers icon and banner. The current logo is assets/brand/sharkbaby-source.png
+and the current banner comes from tools/art/make_banner.py.
 
 Usage (needs Pillow and Windows' Segoe UI fonts):
     python tools/art/make_art.py <out_dir>
