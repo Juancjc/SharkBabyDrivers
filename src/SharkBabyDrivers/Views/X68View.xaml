@@ -183,7 +183,7 @@
                     </DockPanel>
                     <ContentControl Content="{Binding}" ContentTemplate="{StaticResource Board}" Margin="0,0,0,14"/>
 
-                    <TextBlock Text="{l:T kb_he_wireless_locked}" Style="{StaticResource Hint}" Foreground="{StaticResource Warn}" Margin="0,0,0,8"
+                    <TextBlock Text="{l:T kb_he_profile_locked}" Style="{StaticResource Hint}" Foreground="{StaticResource Warn}" Margin="0,0,0,8"
                                Visibility="{Binding HeLocked, Converter={StaticResource VisIf}}"/>
                     <Border Style="{StaticResource Card}" IsEnabled="{Binding HeEditable}">
                         <StackPanel>

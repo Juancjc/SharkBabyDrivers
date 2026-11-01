@@ -184,9 +184,10 @@ public sealed class X68Vm : DeviceVm
     }
 
     public bool IsEditingActive => EditProfile == Img.ActiveProfile;
-    /// <summary>Connected through the 2.4G receiver: no profile switch, so Hall Effect only on the active profile.</summary>
-    public bool IsWireless => !_kb.CanSwitchProfiles;
-    public bool HeLocked => IsWireless && !(IsEditingActive && X68Device.HeWasRead(_original, EditProfile));
+    public bool IsWireless => _kb.Link == LinkKind.Dongle;
+    /// <summary>Receiver and X68 V2 cable connections cannot safely select a different profile.</summary>
+    public bool HasRestrictedProfiles => !_kb.CanSwitchProfiles;
+    public bool HeLocked => HasRestrictedProfiles && !(IsEditingActive && X68Device.HeWasRead(_original, EditProfile));
     public bool HeEditable => HasSelection && !HeLocked;
     public string ActiveProfileText => Loc.F("kb_active_profile", Img.ActiveProfile + 1);
 
@@ -598,12 +599,12 @@ public sealed class X68Vm : DeviceVm
             Img.ActiveProfile = e[2];
             // Keep the baseline's profile while edits are pending so the write preflight can detect
             // that HE would otherwise be applied to a different physical profile.
-            if (!IsWireless || !IsDirty) _original.ActiveProfile = e[2];
+            if (!HasRestrictedProfiles || !IsDirty) _original.ActiveProfile = e[2];
             OnPropertyChanged(nameof(ActiveProfileText));
             OnPropertyChanged(nameof(IsEditingActive));
             OnSelectionChanged();
-            // Wirelessly only the active profile's Hall Effect is known: read the new one (unless there are edits).
-            if (IsWireless && !IsDirty && !X68Device.HeWasRead(_original, e[2])) _ = InitializeAsync();
+            // On restricted devices only the active profile's HE is known: read the new one unless there are edits.
+            if (HasRestrictedProfiles && !IsDirty && !X68Device.HeWasRead(_original, e[2])) _ = InitializeAsync();
         }
     }
 
@@ -675,7 +676,7 @@ public sealed class X68Vm : DeviceVm
     {
         foreach (var m in Macros) Img.Macros[m.Index] = m.Encode();
         var img = Img.Clone();
-        if (IsWireless)
+        if (HasRestrictedProfiles)
             for (var profile = 0; profile < Profiles; profile++)
                 // Display getters can create default tables for profiles that were never read.
                 // Neither a saved file nor the new baseline may claim those tables came from hardware.
@@ -689,14 +690,14 @@ public sealed class X68Vm : DeviceVm
         var img = X68Image.FromSnapshot(snap);
         // Keep identity/firmware of the connected keyboard; take every setting from the file.
         img.DeviceId = Img.DeviceId; img.UsbFirmware = Img.UsbFirmware; img.RfFirmware = Img.RfFirmware;
-        if (IsWireless)
+        if (HasRestrictedProfiles)
         {
             img.ActiveProfile = _original.ActiveProfile;
         }
         for (var profile = 0; profile < Profiles; profile++)
-            if (IsWireless && profile != img.ActiveProfile) img.HallEffect[profile].Clear();
+            if (HasRestrictedProfiles && profile != img.ActiveProfile) img.HallEffect[profile].Clear();
             else
-                // A wireless file may contain HE for a different profile only. Missing tables are
+                // A restricted profile file may contain HE for a different profile only. Missing tables are
                 // left as they are on the connected keyboard, rather than filled with UI defaults.
                 foreach (var (op, table) in _original.HallEffect[profile])
                     if (!img.HallEffect[profile].ContainsKey(op)) img.HallEffect[profile][op] = (byte[])table.Clone();

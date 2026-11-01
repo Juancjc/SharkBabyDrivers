@@ -6,7 +6,7 @@ internal static partial class Strings
     {
         ["unsupported_device_title"] = "Dispositivo sem suporte de configuração",
         ["unsupported_device_text"] = "Este dispositivo foi detectado, mas ainda não pode ser configurado pelo aplicativo.",
-        ["kb_he_wireless_locked"] = "Pelo receptor 2.4G o Hall Effect só pode ser lido e gravado no perfil em uso (trocar de perfil sem fio pode derrubar a conexão). Para editar este perfil, ative-o no teclado ou use o cabo USB-C.",
+        ["kb_he_profile_locked"] = "Nesta conexão o Hall Effect só pode ser lido e gravado no perfil em uso. A troca de perfil pelo app está bloqueada para evitar travamentos. Para editar outro perfil, selecione-o diretamente no teclado e leia novamente.",
         ["kb_profile"] = "Perfil",
         ["kb_active_profile"] = "Perfil em uso no teclado: {0}",
         ["kb_activate_profile"] = "Usar este perfil no teclado",
@@ -119,7 +119,7 @@ internal static partial class Strings
     {
         ["unsupported_device_title"] = "Device configuration is not supported",
         ["unsupported_device_text"] = "This device was detected, but the app cannot configure it yet.",
-        ["kb_he_wireless_locked"] = "Through the 2.4G receiver Hall Effect can only be read and written on the profile in use (switching profiles wirelessly can drop the connection). To edit this profile, activate it on the keyboard or use the USB-C cable.",
+        ["kb_he_profile_locked"] = "On this connection Hall Effect can only be read and written for the active profile. Profile switching in the app is blocked to prevent lockups. To edit another profile, select it on the keyboard and read it again.",
         ["kb_profile"] = "Profile",
         ["kb_active_profile"] = "Profile in use on the keyboard: {0}",
         ["kb_activate_profile"] = "Use this profile on the keyboard",

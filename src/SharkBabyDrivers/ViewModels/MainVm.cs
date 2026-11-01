@@ -75,8 +75,8 @@ public sealed class MainVm : ObservableObject, IDisposable
     private async void Refresh()
     {
         if (_refreshing) return;
-        // Never rescan while a page is talking to its device.
-        if (Devices.Any(d => d.Busy)) return;
+        // Discovery only reads HID attributes. A sleeping receiver retry must not hide a newly
+        // connected cable; DeviceManager keeps already-open collections instead of reopening them.
         _refreshing = true;
         try { await Task.Run(_manager.Refresh); }
         catch (Exception ex) { App.Log(ex); }
@@ -93,7 +93,11 @@ public sealed class MainVm : ObservableObject, IDisposable
         };
         Devices.Add(vm);
         OnPropertyChanged(nameof(HasDevices));
-        Selected ??= vm;
+        if (Selected is null || (device.Link == LinkKind.Wired
+            && Selected.Device.Link == LinkKind.Dongle
+            && Selected.Device.Model == device.Model
+            && !Selected.IsDirty))
+            Selected = vm;
         _ = vm.InitializeAsync();
     }
 

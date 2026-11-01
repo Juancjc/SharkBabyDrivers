@@ -25,9 +25,11 @@ Confidence tags: **[CODE]** = read directly from code, **[LIVE]** = confirmed on
 * `3151:5026` is a **2.4 GHz "dongle_common" receiver (1 kHz)**. It forwards the same 64-byte keyboard packets
   without a prefix; retrieving an RF response needs the receiver-local `F7`/`FC` sequence in §5. **[LIVE]**
 * **Onboard profiles: 4** (`layer: 4`). Key matrix / Fn layer GETs take an explicit profile index;
-  **HE (magnetic switch) tables and probably lighting apply to the *active* profile only**. Over USB, reading HE for
-  all four requires selecting each profile and restoring the original (§7). **Never send 0x04 over the dongle**:
-  it has locked up the keyboard until power-cycled. Wireless reads/writes cover HE of the active profile only.
+  **HE (magnetic switch) tables and probably lighting apply to the *active* profile only**. **Never send 0x04
+  over the dongle, or to X68 V2 (id 2901) even over USB.** `CanSwitchProfiles` stays false until identification,
+  and remains false for every dongle and for model 2901. Snapshots of 2901 use GETs only and cover HE of the active
+  profile on both links; change profiles physically on the keyboard, then reread. Other identified models retain
+  USB profile switching (§7).
 
 ---------------------------------------------------------------------------------------------------
 
@@ -118,7 +120,7 @@ offset: 0    1..6          7         8..63
 | 0x01 | SET_RESET (factory reset) | ⚠ | vendor command; **blocked by the app on every link, never send** | – |
 | 0x03 | SET_REPORT (polling rate) | W | `[2]=code` (0=8000,1=4000,2=2000,3=1000,4=500,5=250,6=125 Hz) | – |
 | 0x83 | GET_REPORT | R | `[0x83]` | `resp[2]=code` |
-| 0x04 | SET_PROFILE | W | `[1]=profile 0..3` | – |
+| 0x04 | SET_PROFILE | W | `[1]=profile 0..3`; **blocked over dongle and on id 2901 on every link** | – |
 | 0x84 | GET_PROFILE | R | `[0x84]` | `resp[1]=active profile` |
 | 0x85 | GET_LEDONOFF | R | `[0x85]` | `resp[1]==1` → power-save mode on |
 | 0x06 | SET_DEBOUNCE | W | `[1]=value` | – |
@@ -290,19 +292,25 @@ the busy/idle events **`0F 01` / `0F 00`** on the event collection (§6). Do not
 `WriteImageVerified` rereads the image and retries differences; a successful USB write alone does not prove that
 the keyboard stored the change.
 
-SignalRGB controlling the keyboard generated roughly 25 busy/idle events per second during live testing and
-caused response loss. Disable the keyboard in SignalRGB or close the program before testing. `ForeignTraffic`
-detects repeated events without a recent write from this app and reports the conflict. Wake the keyboard by
+SignalRGB controlling the same keyboard through the receiver generated roughly 25 busy/idle events per second
+during live testing and response loss was observed. SignalRGB may remain open; if simultaneous control causes
+a conflict during configuration, pause only this keyboard's control in SignalRGB. `ForeignTraffic` detects
+repeated events without a recent write from this app and reports the conflict. Wake the keyboard by
 typing before a test. An unanswered GET raises `DeviceAsleepException` when no foreign traffic is detected;
 the UI retries connection every 3 seconds.
 
 ### 5.3 Wireless safety limits
 
-* **Never select a profile (`0x04`) through this receiver.** A live attempt locked up the keyboard until it was
-  switched off and on. `CanSwitchProfiles` is false, and profile activation and calibration are disabled in the UI.
+* **Never select a profile (`0x04`) through this receiver, or on X68 V2 (id 2901) over either link.** A wireless
+  attempt locked up the keyboard until it was switched off and on. A subsequent USB snapshot on 2901 also
+  coincided with loss of typing and LEDs; the log records a `SelectProfile` timeout. Automatic profile selection
+  is the main lead, not a definitive hardware diagnosis. The user reported stable operation with SharkBabyDrivers
+  closed and SignalRGB open. `CanSwitchProfiles` is false before identification, for every dongle and for id 2901;
+  profile activation is disabled accordingly. Calibration remains disabled wirelessly.
 * Read key matrices for all four profiles using the profile parameter; read/write HE only for the active profile.
   `HeWasRead` distinguishes missing HE tables from actual all-zero data, so unread profiles must not be filled
-  with defaults and written back. A wireless original backup therefore omits HE for inactive profiles.
+  with defaults and written back. A wireless original backup, and an id 2901 backup over either link, therefore
+  omit HE for inactive profiles. To work on another profile, select it physically and reread the keyboard.
 * Before the first SET, query the physical active profile (`84`) and compare it with the image that was read.
   If it changed, abort before writing and require a fresh read: HE writes implicitly address the active profile.
 * Never send reset (`01`), pairing (`F8`), bootloader (`7F`), flash erase (`AC`), upgrade (`BA`), or any
@@ -336,8 +344,9 @@ Debounced 300 ms before dispatch.
 ## 7. BACKUP — how the original app reads the full state (do this before writing anything)
 
 Read order used by the vendor app (`writeToAppState`, index.js 69843 / 68340-68460) plus what is needed for a full image.
-**Steps that select a profile apply to the USB cable only. Over 2.4 GHz, skip profile selection and read HE only
-for the already-active profile (§5).**
+**The sequence below documents the vendor's full-image procedure. In SharkBabyDrivers, profile-selection steps
+are allowed only on identified models other than 2901 over USB. Over 2.4 GHz, and on id 2901 on either link,
+skip profile selection and read HE only for the already-active profile (§5). Snapshots of 2901 send GETs only.**
 1. `0x8F` id + fw, `0x80` rf fw → choose class (2370/2901), compute `k` and top-deadzone support.
 2. `0x84` active profile `P0` (remember it!).
 3. Global: `0x87` LED, `0x88` side LED (harmless), `0x89` KBOption, `0x91` sleep, `0x83` polling, `0x97` auto-OS,
@@ -353,8 +362,10 @@ for the already-active profile (§5).**
 8. Restore active profile: `0x04 P0`.
 Store raw 64-byte responses (plus decoded JSON) so a restore can replay them byte-exact with the SET counterparts
 (0x0A bulk, 0x10 bulk, 0x0B, 0x0C, 0x65 bulk per op, 0x07, 0x09, 0x11, 0x03, 0x17, 0x06, 0x04).
-Note: over USB, step 6's `0x04` writes are the only writes in a backup, and the original profile is restored in a
-`finally` block. A dongle backup sends no profile-selection commands and contains no HE data for inactive profiles.
+Note: on other identified models over USB, step 6's `0x04` writes are the only writes in a backup, and the original
+profile is restored in a `finally` block. A dongle backup, or an id 2901 backup over either link, sends no
+profile-selection commands and contains no HE data for inactive profiles. Select another profile physically
+and reread to configure its HE settings.
 The app saves one `original.json` per device without replacing it; named configurations belong to `saved-profiles`
 and are grouped by model.
 
@@ -362,8 +373,8 @@ and are grouped by model.
 
 ## 8. Safety notes
 * Never send 0x01 (factory reset), 0xAC (flash erase), 0x7F/0xF8 55 AA 55 AA (boot loader), 0xBA xx (upgrade).
-* Never send keyboard commands in 0xF0–0xFF, and never select a profile over 2.4 GHz. The receiver-local status/cache
-  operations in §5 do not forward commands to the keyboard.
+* Never send keyboard commands in 0xF0–0xFF. Never select a profile before identification, over 2.4 GHz, or on
+  id 2901 even over USB. The receiver-local status/cache operations in §5 do not forward commands to the keyboard.
 * Respect wired delays (≥10 ms between Set/Get, ≥100 ms after SETs) and device busy/idle events. Over the dongle,
   use §5's flow control and poll `has_response` without a sleep.
 * Bulk HE writes overwrite **all 128 slots** of an op — always start from a fresh read of that op.

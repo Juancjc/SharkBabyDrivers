@@ -31,6 +31,7 @@ public sealed class X68Device : ISharkDevice
     private readonly IX68Transport _io;
     private readonly SemaphoreSlim _busy = new(1, 1);
     private volatile bool _deviceBusy;
+    private uint? _identifiedDeviceId;
 
     public string DeviceKey { get; }
     public string Model => "Attack Shark X68 PRO HE";
@@ -146,8 +147,10 @@ public sealed class X68Device : ISharkDevice
     {
         var img = new X68Image();
         progress?.Report("identificação");
+        _identifiedDeviceId = null;
         var id = QueryEcho(GetUsbVersion);
         img.DeviceId = BitConverter.ToUInt32(id, 1);
+        _identifiedDeviceId = img.DeviceId;
         img.UsbFirmware = id[8] << 8 | id[7];
         var rf = Ask(GetRfVersion);
         img.RfFirmware = rf[0] == GetRfVersion ? rf[2] << 8 | rf[1] : 0;
@@ -188,7 +191,7 @@ public sealed class X68Device : ISharkDevice
                 progress?.Report($"perfil {profile + 1}: Hall Effect");
                 if (profile != current)
                 {
-                    // Over 2.4 GHz the profile is never switched (it can drop the link): HE of the active one only.
+                    // The receiver and revision 2901 (also over cable) must never switch profiles.
                     if (!CanSwitchProfiles) continue;
                     SelectProfile(profile);
                     current = profile;
@@ -203,7 +206,7 @@ public sealed class X68Device : ISharkDevice
         }
         finally
         {
-            if (current != original) SelectProfile(original);
+            if (CanSwitchProfiles && current != original) SelectProfile(original);
         }
 
         progress?.Report("macros");
@@ -301,16 +304,16 @@ public sealed class X68Device : ISharkDevice
     public void WriteAutoOs(bool on) { Send(Command([SetAutoOs, (byte)(on ? 1 : 0)])); VendorSleep(); }
 
     /// <summary>
-    /// False over the 2.4 GHz receiver: a profile switch sent through it once left the keyboard busy and off the
-    /// link until it was power-cycled, so the active profile is only changed over the cable (or on the keyboard).
-    /// Hall-effect tables exist only for the active profile, so wirelessly only those can be read and written.
+    /// Profile switching is allowed only after identifying the original revision (2370) over cable.
+    /// Revision 2901 has also locked up after a wired profile switch. It and the receiver therefore use
+    /// only the physical active profile's HE tables, without sending a profile switch even during backup.
     /// </summary>
-    public bool CanSwitchProfiles => Link != LinkKind.Dongle;
+    public bool CanSwitchProfiles => Link == LinkKind.Wired && _identifiedDeviceId == 2370;
 
     public void SelectProfile(int profile)
     {
         if (!CanSwitchProfiles)
-            throw new InvalidOperationException("Pelo receptor 2.4G o perfil ativo não é trocado (o teclado pode perder a conexão). Use o cabo USB-C.");
+            throw new InvalidOperationException("A troca de perfil pelo aplicativo está bloqueada para esta conexão ou revisão do teclado, pois pode interromper seu funcionamento. Troque o perfil no próprio teclado.");
         Send(Command([SetProfile, (byte)profile]));
         VendorSleep();
     }
@@ -408,7 +411,7 @@ public sealed class X68Device : ISharkDevice
                 && img.HallEffect[profile].ContainsKey(op) && Diff(img.He(profile, op), before.HallEffect[profile].GetValueOrDefault(op)));
             heChanged |= before is not null && img.HallEffect[profile].ContainsKey(HeOp.DksStages)
                 && Diff(img.He(profile, HeOp.DksStages), before.HallEffect[profile].GetValueOrDefault(HeOp.DksStages));
-            // Over 2.4 GHz only the active profile's Hall-effect tables can be written (no profile switch).
+            // Without safe profile switching, HE writes must stay on the physical active profile.
             if (heChanged && (CanSwitchProfiles || (profile == current && HeWasRead(before ?? img, profile))))
             {
                 progress?.Report($"perfil {profile + 1}: Hall Effect");

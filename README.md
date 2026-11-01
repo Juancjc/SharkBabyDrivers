@@ -17,7 +17,8 @@ Um app só, leve e em português (ou inglês), para configurar o **mouse Attack 
 - Barra lateral com cada periférico conectado (detecta ligar/desligar na hora).
 - **Backup antes de tudo:** ao conectar, o app lê o que está salvo *dentro* do dispositivo e guarda um
   único backup **ORIGINAL** por dispositivo, sem substituí-lo nas conexões seguintes. Nada é aplicado antes disso.
-  Pelo receptor 2.4G, o backup do teclado inclui Hall Effect somente do perfil ativo.
+  Pelo receptor 2.4G e no X68 V2 (id 2901) também pelo cabo, o backup do teclado inclui Hall Effect somente
+  do perfil ativo. A leitura desse modelo usa apenas consultas, sem trocar o perfil.
 - Na aba **Salvos e backup**, salve configurações com nome, carregue, importe e exporte perfis, ou restaure e
   exporte o backup original. Os perfis salvos ficam agrupados por modelo e podem ser usados pelo cabo ou receptor.
 - Grava só o que mudou, ao clicar em **Aplicar no dispositivo** (com *Descartar alterações*).
@@ -41,15 +42,19 @@ Um app só, leve e em português (ou inglês), para configurar o **mouse Attack 
   timers de sono; macros. O reset de fábrica do teclado fica desativado por segurança, inclusive pelo cabo.
 
 > **Teclado pelo receptor 2.4G (`3151:5026`):** permite ler e aplicar configurações, incluindo iluminação e
-> Hall Effect do **perfil ativo**. A troca de perfil e a calibração ficam desativadas sem fio; use o cabo para
-> essas operações e para ler o Hall Effect dos quatro perfis. As matrizes de teclas dos quatro perfis podem ser
-> lidas sem trocar o perfil ativo. Após aplicar pelo receptor, o app relê os dados e tenta novamente o que não
+> Hall Effect do **perfil ativo**. A troca de perfil e a calibração ficam desativadas sem fio. No **X68 V2
+> (id 2901), a ativação de perfil pelo app também fica bloqueada pelo cabo**: durante uma leitura automática,
+> houve perda da digitação e dos LEDs perto de uma troca de perfil. Esse é o principal indício nos registros,
+> sem confirmar sozinho a causa. Para configurar HE de outro perfil, troque-o no próprio teclado e faça uma
+> nova leitura no app. As matrizes de teclas dos quatro perfis podem ser lidas sem trocar o perfil ativo.
+> Após aplicar pelo receptor, o app relê os dados e tenta novamente o que não
 > foi confirmado. Antes de gravar, também confere o perfil ativo no teclado e interrompe a aplicação se ele
 > mudou desde a leitura. A leitura é mais lenta que pelo cabo.
 >
 > Aperte uma tecla antes de conectar para acordar o teclado; enquanto ele dorme, o app tenta novamente a cada
-> 3 segundos. **Desative o controle do teclado no SignalRGB ou feche-o**: o tráfego contínuo de iluminação pode
-> fazer as respostas se perderem. O app avisa quando detecta esse tráfego.
+> 3 segundos. O SignalRGB pode continuar aberto; controlar este mesmo teclado pelo receptor ao mesmo tempo
+> pode fazer as respostas se perderem. Se houver conflito ao configurar, pause apenas o controle deste teclado
+> no SignalRGB. O app avisa quando detecta esse tráfego.
 
 ## Baixar
 
@@ -71,6 +76,10 @@ git push origin v1.1.0   # o workflow Release testa, compila e cria a release co
 
 Requer Windows 10/11 e o [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 
+Para testar **sem instalar**, dê dois cliques em `Testar.cmd` na pasta do projeto. Ele compila a versão
+atual e abre o app diretamente dessa pasta. Feche a janela do app antes de recompilar. Apenas uma cópia
+do SharkBabyDrivers pode ficar aberta por vez, para evitar disputa pelo dispositivo.
+
 ```powershell
 dotnet run --project src/SharkBabyDrivers            # app
 dotnet run --project src/SharkBabyDrivers -- --demo  # + um X68 simulado para conhecer as telas
@@ -84,7 +93,8 @@ dotnet publish src/SharkBabyDrivers -c Release -r win-x64 --self-contained false
 ```
 
 Não precisa de administrador nem de driver: tudo é feito por HID padrão do Windows.
-**Feche os programas oficiais** antes de usar (dois apps falando com o mesmo dispositivo se atrapalham).
+Evite configurar o mesmo dispositivo simultaneamente em outro programa. Se houver disputa, pause apenas
+o controle desse dispositivo no outro app durante a configuração.
 
 ## Onde ficam os dados
 
