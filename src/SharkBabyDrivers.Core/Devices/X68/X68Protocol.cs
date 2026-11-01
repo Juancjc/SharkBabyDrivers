@@ -152,6 +152,15 @@ public static class X68Lighting
     public const int MaxSpeed = 4;
     public const byte Rainbow = 8, CustomColor = 7;
 
+    /// <summary>
+    /// Whether 0x87 bytes describe a real effect the app may write back: mode ≤ 25 and not the host-driven screen
+    /// colour, speed and brightness ≤ 4, colour code ≤ 8, option ≤ 7. Over the receiver a garbled answer once read as
+    /// 87 04 BF 04 FB FF FF FF (speed 0xBF, colour code 0xB): that must never be written to the keyboard.
+    /// </summary>
+    public static bool IsPlausibleEffect(byte[] led) =>
+        led.Length >= 8 && led[1] <= (byte)X68LightMode.UserColor && led[1] != (byte)X68LightMode.ScreenColor
+        && led[2] <= MaxSpeed && led[3] <= MaxBrightness && (led[4] & 0x0F) <= 8 && (led[4] >> 4) <= 7;
+
     /// <summary>The effects the official app lists for the X68 (layout "I"), host-driven ones excluded.</summary>
     public static readonly IReadOnlyList<LightModeInfo> Modes =
     [

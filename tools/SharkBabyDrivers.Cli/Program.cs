@@ -98,6 +98,11 @@ switch (command)
         return 0;
     }
 
+    case "signalrgb-layout":
+        // Prints the key table of the SignalRGB plugin (no device access).
+        Console.WriteLine(SharkBabyDrivers.Core.Lighting.SignalRgbKeyMap.ToJavaScript());
+        return 0;
+
     default:
         Console.Error.WriteLine("uso: SharkBabyDrivers.Cli [list|dump|backup|probe rid len flag [waitMs]]");
         return 64;

@@ -351,6 +351,24 @@
                         </DockPanel>
                     </StackPanel>
                 </Border>
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="{l:T capture_title}" Style="{StaticResource H2}"/>
+                        <TextBlock Text="{l:T capture_text}" Style="{StaticResource Hint}" Margin="0,4,0,10"/>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Command="{Binding CaptureStaticPictureCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE722;" Style="{StaticResource Icon}" FontSize="14" Margin="0,0,8,0"/>
+                                    <TextBlock Text="{l:T capture_button}"/>
+                                </StackPanel>
+                            </Button>
+                            <TextBlock Text="{l:T capture_slot}" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <ComboBox ItemsSource="{Binding CaptureSlotChoices}" SelectedValuePath="Value" DisplayMemberPath="Label" SelectedValue="{Binding CaptureSlot}"
+                                      MinWidth="110" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <TextBlock Text="{Binding CaptureStatusText}" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
+                    </StackPanel>
+                </Border>
                 <TextBlock Text="{l:T light_locked}" Style="{StaticResource Hint}" Foreground="{StaticResource Warn}" Margin="4,0,0,8"
                            Visibility="{Binding LightingBySignalRgb, Converter={StaticResource VisIf}}"/>
                 <Border Style="{StaticResource Card}" IsEnabled="{Binding LightingEditable}">

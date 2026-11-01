@@ -133,6 +133,37 @@ public sealed class X68Vm : DeviceVm
     public AsyncCommand CalibrateCommand { get; }
     public AsyncCommand FactoryResetCommand { get; }
     public RelayCommand InstallSignalRgbPluginCommand { get; }
+    public AsyncCommand CaptureStaticPictureCommand { get; }
+
+    // ------------------------------------------------------------------ static picture from SignalRGB
+
+    public IReadOnlyList<Choice<int>> CaptureSlotChoices { get; } =
+        Enumerable.Range(0, 5).Select(i => new Choice<int>(i, "", () => Loc.F("capture_slot_n", i + 1))).ToList();
+    private int _captureSlot;
+    public int CaptureSlot { get => _captureSlot; set => Set(ref _captureSlot, value); }
+
+    public string CaptureStatusText => Loc.T(_lighting.KeyColorsAvailable ? "capture_ready" : "capture_waiting");
+
+    private async Task CaptureStaticPictureAsync()
+    {
+        if (!App.Confirm(Loc.F("capture_confirm", CaptureSlot + 1))) return;
+        Busy = true;
+        try
+        {
+            var keys = await _lighting.CaptureStaticPictureAsync(CaptureSlot);
+            ShowToast(Loc.F("capture_done", keys, CaptureSlot + 1));
+        }
+        finally { Busy = false; }
+        OnLightingChanged();
+    }
+
+    /// <summary>The coordinator stored a picture: keep the page (and later backups/profiles) in step with the keyboard.</summary>
+    private void OnUserPicStored(X68Device device, int slot, byte[] rgb)
+    {
+        if (device != _kb || !IsReady) return;
+        rgb.AsSpan(0, Math.Min(rgb.Length, Img.UserPics[slot].Length)).CopyTo(Img.UserPics[slot]);
+        rgb.AsSpan(0, Math.Min(rgb.Length, _original.UserPics[slot].Length)).CopyTo(_original.UserPics[slot]);
+    }
 
     // ------------------------------------------------------------------ lighting owner (SignalRGB bridge)
 
@@ -179,6 +210,7 @@ public sealed class X68Vm : DeviceVm
         OnPropertyChanged(nameof(LightingStatusText));
         OnPropertyChanged(nameof(SignalRgbPluginState));
         OnPropertyChanged(nameof(SignalRgbPluginText));
+        OnPropertyChanged(nameof(CaptureStatusText));
     }
 
     /// <summary>The coordinator rewrote the keyboard's lighting (owner switch): show what the keyboard has now.</summary>
@@ -198,6 +230,8 @@ public sealed class X68Vm : DeviceVm
         _lighting = lighting;
         _lighting.Changed += OnLightingChanged;
         _lighting.LedChanged += OnLightingLed;
+        _lighting.UserPicChanged += OnUserPicStored;
+        CaptureStaticPictureCommand = new AsyncCommand(CaptureStaticPictureAsync, () => CanWrite && !App.IsPreview);
         _lightingTimer.Tick += (_, _) => OnLightingChanged();
         _lightingTimer.Start();
         InstallSignalRgbPluginCommand = new RelayCommand(InstallSignalRgbPlugin, () => !App.IsPreview);
@@ -730,6 +764,7 @@ public sealed class X68Vm : DeviceVm
         _lightingTimer.Stop();
         _lighting.Changed -= OnLightingChanged;
         _lighting.LedChanged -= OnLightingLed;
+        _lighting.UserPicChanged -= OnUserPicStored;
         base.Dispose();
     }
 

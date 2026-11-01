@@ -157,3 +157,87 @@ public class SignalRgbLightingTests
         Assert.Contains("udp.send", js);
     }
 }
+
+/// <summary>Static multi-colour picture captured from SignalRGB (the firmware has no per-key live colour).</summary>
+public class SignalRgbStaticPictureTests
+{
+    private static (X68Simulator Sim, X68Device Dev) Create()
+    {
+        var sim = new X68Simulator(X68Simulator.FactoryImage(2901, 0x0505));
+        return (sim, new X68Device(sim, "sim") { TransferDelayMs = 0, WriteSettleMs = 0 });
+    }
+
+    [Fact]
+    public void Key_map_covers_every_key_of_the_v2_layout_once_inside_the_grid()
+    {
+        var keys = SignalRgbKeyMap.Keys;
+        Assert.Equal(X68Model.Rev2901.Caps.Count, keys.Count);
+        Assert.Equal(keys.Count, keys.Select(k => k.Slot).Distinct().Count());
+        Assert.Equal(keys.Count, keys.Select(k => k.Name).Distinct().Count());
+        Assert.All(keys, k => Assert.InRange(k.X, 0, SignalRgbKeyMap.GridWidth - 1));
+        Assert.All(keys, k => Assert.InRange(k.Y, 0, SignalRgbKeyMap.GridHeight - 1));
+        Assert.All(keys, k => Assert.True(k.Name.All(c => c < 128), k.Name));
+        // keys of the same row never share a cell
+        Assert.Equal(keys.Count, keys.Select(k => (k.X, k.Y)).Distinct().Count());
+    }
+
+    [Fact]
+    public void Plugin_declares_exactly_the_app_key_map()
+    {
+        var root = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(root, "SharkBabyDrivers.sln"))) root = Path.GetDirectoryName(root)!;
+        var js = File.ReadAllText(Path.Combine(root, "integrations", "signalrgb", "Attack_Shark_X68_Pro_HE_SharkBabyDrivers.js")).Replace("\r\n", "\n");
+        Assert.Contains(SignalRgbKeyMap.ToJavaScript(), js);
+        Assert.Contains("export function Size() { return [16, 6]; }", js);
+        Assert.DoesNotContain("send_report", js);
+        Assert.True(js.All(c => c < 128), "plugin must stay ASCII");
+    }
+
+    [Fact]
+    public void Bridge_parses_per_key_snapshots_and_rejects_bad_ones()
+    {
+        byte[] good = [0x53, 0x42, 0x44, 0x31, 1, 3, 0x50, 0x2F, 2, 6, 255, 0, 0, 41, 0, 0, 255];
+        var f = SignalRgbBridge.ParseKeys(good, 10);
+        Assert.NotNull(f);
+        Assert.Equal((ushort)0x502F, f!.ProductId);
+        Assert.Equal(((byte)255, (byte)0, (byte)0), f.Keys[6]);
+        Assert.Equal(((byte)0, (byte)0, (byte)255), f.Keys[41]);
+        Assert.Null(SignalRgbBridge.Parse(good, 10));                                  // not a colour packet
+        Assert.Null(SignalRgbBridge.ParseKeys(good[..15], 10));                        // truncated
+        byte[] badSlot = [0x53, 0x42, 0x44, 0x31, 1, 3, 0x50, 0x2F, 1, 200, 1, 2, 3];
+        Assert.Null(SignalRgbBridge.ParseKeys(badSlot, 10));                           // slot outside the matrix
+
+        var bridge = new SignalRgbBridge();
+        bridge.AcceptKeys(f);
+        Assert.Same(f, bridge.LatestKeysFor(0x5026, 1000));                            // newest of any connection
+        Assert.Null(bridge.LatestKeysFor(0x502F, 9000));                               // too old
+    }
+
+    [Fact]
+    public void Picture_is_written_once_verified_and_shown_with_effect_13()
+    {
+        var (sim, dev) = Create();
+        var rgb = new byte[X68Device.UserPicBytes];
+        rgb[6 * 3] = 255;                 // F1 red
+        rgb[41 * 3 + 2] = 255;            // Space blue
+        sim.Sent.Clear();
+        dev.WriteUserPicVerified(2, rgb);
+        Assert.Equal(7, sim.Sent.Count(p => p[0] == SetUserPic));     // one picture = 7 packets, no repeats
+        Assert.Equal(rgb, sim.State.UserPics[2][..X68Device.UserPicBytes]);
+
+        var led = dev.ReadLed();
+        dev.EnterUserPictureMode(led, 2);
+        Assert.Equal((byte)X68LightMode.UserPicture, sim.State.Led[1]);
+        Assert.Equal(2 << 4, sim.State.Led[4]);
+        Assert.DoesNotContain(sim.Sent, p => p[0] is SetProfile or SetReset);
+    }
+
+    [Fact]
+    public void Garbled_lighting_is_never_considered_a_valid_effect()
+    {
+        Assert.False(X68Lighting.IsPlausibleEffect(Convert.FromHexString("8704BF04FBFFFFFF")));  // read over the receiver
+        Assert.False(X68Lighting.IsPlausibleEffect(Convert.FromHexString("8715040400000000")));  // screen colour (host-driven)
+        Assert.True(X68Lighting.IsPlausibleEffect(Convert.FromHexString("870104040714A404")));   // steady green
+        Assert.True(X68Lighting.IsPlausibleEffect(Convert.FromHexString("870D0404200000C8")));   // picture 3
+    }
+}

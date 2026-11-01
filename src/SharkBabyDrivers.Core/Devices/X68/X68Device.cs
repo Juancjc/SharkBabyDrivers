@@ -312,6 +312,37 @@ public sealed class X68Device : ISharkDevice
     /// <summary>The lighting parameters (answer of 0x87: mode, speed, brightness, option, R, G, B).</summary>
     public byte[] ReadLed() => QueryEcho(GetLedParam);
 
+    /// <summary>Bytes of one LED picture: 126 matrix slots × RGB (index = matrix slot).</summary>
+    public const int UserPicBytes = 378;
+
+    /// <summary>Reads LED picture <paramref name="slot"/> (0..4) — what the "User picture" effect shows.</summary>
+    public byte[] ReadUserPic(int slot) => ReadPages(p => [GetUserPic, (byte)slot, 0xFF, (byte)p], 6)[..UserPicBytes];
+
+    /// <summary>
+    /// Stores a per-key picture in slot <paramref name="slot"/> (flash: 7 packets, one write per call — never per
+    /// frame) and reads it back, writing again if a packet was lost on the way (2.4 GHz).
+    /// </summary>
+    public void WriteUserPicVerified(int slot, byte[] rgb)
+    {
+        if (slot is < 0 or > 4) throw new ArgumentOutOfRangeException(nameof(slot));
+        if (rgb.Length < UserPicBytes) throw new ArgumentException("A imagem precisa de 378 bytes (126 teclas × RGB).", nameof(rgb));
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            WriteUserPic(slot, rgb);
+            if (ReadUserPic(slot).AsSpan().SequenceEqual(rgb.AsSpan(0, UserPicBytes))) return;
+        }
+        throw new IOException("O teclado não confirmou a imagem gravada. Tente de novo (pelo cabo é mais estável).");
+    }
+
+    /// <summary>Shows LED picture <paramref name="slot"/> (effect 13, as the official app sets it), keeping brightness.</summary>
+    public void EnterUserPictureMode(byte[] led, int slot)
+    {
+        var brightness = Math.Clamp((int)led[3], 1, X68Lighting.MaxBrightness);
+        var speed = Math.Clamp((int)led[2], 0, X68Lighting.MaxSpeed);
+        Send(Command([SetLedParam, (byte)X68LightMode.UserPicture, (byte)speed, (byte)brightness, (byte)(slot << 4), 0, 200, 200], bit8: true));
+        VendorSleep();
+    }
+
     /// <summary>Switches the effect to the host-driven screen colour (one flash write), keeping brightness.</summary>
     public void EnterScreenColorMode(byte[] led, byte r, byte g, byte b)
     {

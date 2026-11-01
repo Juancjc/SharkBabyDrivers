@@ -36,6 +36,8 @@ public sealed class LightingCoordinator : IDisposable
 
     /// <summary>Raised (on the UI thread) when the keyboard's lighting bytes were changed by the coordinator.</summary>
     public event Action<X68Device, byte[]>? LedChanged;
+    /// <summary>Raised (on the UI thread) after a static picture was stored: device, picture slot, 378 RGB bytes.</summary>
+    public event Action<X68Device, int, byte[]>? UserPicChanged;
     /// <summary>Raised (on the UI thread) whenever the owner, the connection or the apply state changes.</summary>
     public event Action? Changed;
 
@@ -161,12 +163,19 @@ public sealed class LightingCoordinator : IDisposable
         if (signal)
         {
             if (screen) return null;
-            _settings.KeyboardLedBeforeSignalRgb = Convert.ToHexString(led);
+            // Kept only when it is a plausible effect: a garbled answer must never be written back later.
+            if (LedLooksValid(led)) _settings.KeyboardLedBeforeSignalRgb = Convert.ToHexString(led);
             _settings.Save();
             var start = _bridge.LatestFor(device.ProductId, Environment.TickCount64)
                         is { } f ? (f.R, f.G, f.B) : (led[5], led[6], led[7]);
-            device.EnterScreenColorMode(led, start.Item1, start.Item2, start.Item3);
-            return device.ReadLed();
+            // Confirm the switch: over 2.4 GHz a lost write would leave the old effect on and every colour ignored.
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                device.EnterScreenColorMode(led, start.Item1, start.Item2, start.Item3);
+                var after = device.ReadLed();
+                if (after[1] == (byte)X68LightMode.ScreenColor) return after;
+            }
+            throw new IOException("O teclado não entrou no modo de cor ao vivo.");
         }
         if (!screen) return null;
         var restore = RestoreBytes(led);
@@ -182,15 +191,77 @@ public sealed class LightingCoordinator : IDisposable
             try
             {
                 var saved = Convert.FromHexString(hex);
-                if (saved.Length >= 8 && saved[1] != (byte)X68LightMode.ScreenColor) return saved;
+                if (LedLooksValid(saved)) return saved;
             }
             catch (FormatException) { }
         }
         var led = (byte[])current.Clone();
         led[1] = (byte)X68LightMode.AlwaysOn;
+        led[2] = (byte)Math.Clamp((int)led[2], 0, X68Lighting.MaxSpeed);
         led[3] = (byte)Math.Clamp((int)led[3], 1, X68Lighting.MaxBrightness);
         led[4] = X68Lighting.CustomColor;
         return led;
+    }
+
+    /// <summary>
+    /// Whether 0x87 bytes describe a real, non-host-driven effect within the firmware ranges (mode ≤ 25, speed and
+    /// brightness ≤ 4, colour code ≤ 8). Over the receiver a garbled answer once read as 87 04 BF 04 FB FF FF FF.
+    /// </summary>
+    public static bool LedLooksValid(byte[] led) => X68Lighting.IsPlausibleEffect(led);
+
+    /// <summary>True when SignalRGB sent the colour of each key in the last 3 s (needed for a static capture).</summary>
+    public bool KeyColorsAvailable => _current is { } d && _bridge.LatestKeysFor(d.ProductId, Environment.TickCount64) is not null;
+
+    /// <summary>
+    /// Stores the colours SignalRGB currently draws on each key as LED picture <paramref name="slot"/> (0..4) and shows
+    /// it (effect 13). One flash write, on request; the picture is static. The lighting goes back to the app (the
+    /// live SignalRGB sync stops) without restoring the previous effect. Returns how many keys got a colour.
+    /// </summary>
+    public async Task<int> CaptureStaticPictureAsync(int slot)
+    {
+        if (_current is not { } device) throw new InvalidOperationException(Localization.Loc.T("capture_no_keyboard"));
+        if (!_backups.HasOriginal(device.DeviceKey)) throw new InvalidOperationException(Localization.Loc.T("light_state_waiting_backup"));
+        var frame = _bridge.LatestKeysFor(device.ProductId, Environment.TickCount64)
+                    ?? throw new InvalidOperationException(Localization.Loc.T("capture_no_frame"));
+        var rgb = new byte[X68Device.UserPicBytes];
+        var count = 0;
+        foreach (var (key, c) in frame.Keys)
+        {
+            if (key * 3 + 2 >= rgb.Length) continue;
+            rgb[key * 3] = c.R; rgb[key * 3 + 1] = c.G; rgb[key * 3 + 2] = c.B;
+            count++;
+        }
+
+        // Hand the lighting to the app first: no more streamed colours, lighting writes unlocked.
+        _applyCts?.Cancel();
+        _settings.KeyboardLightingOwner = LightingOwners.App;
+        _settings.Save();
+        if (_pumps.TryGetValue(device, out var pump)) pump.Active = false;
+        device.LightingLocked = false;
+        SetState("capturing");
+        try
+        {
+            var led = await device.RunAsync(() =>
+            {
+                var current = device.ReadLed();
+                device.WriteUserPicVerified(slot, rgb);
+                device.EnterUserPictureMode(current, slot);
+                return device.ReadLed();
+            });
+            Ui.Post(() =>
+            {
+                LedChanged?.Invoke(device, led);
+                UserPicChanged?.Invoke(device, slot, rgb);
+            });
+            var top = frame.Keys.Values.GroupBy(c => c).OrderByDescending(g => g.Count()).Take(4)
+                .Select(g => $"{g.Key.R:X2}{g.Key.G:X2}{g.Key.B:X2}x{g.Count()}");
+            Trace($"capture slot={slot + 1} keys={count} colors={frame.Keys.Values.Distinct().Count()} top={string.Join(",", top)}");
+            return count;
+        }
+        finally
+        {
+            SetState("app");
+        }
     }
 
     /// <summary>One line for the keyboard page and the tray: who owns the lighting and what is happening.</summary>
