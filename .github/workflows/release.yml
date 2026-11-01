@@ -1,0 +1,63 @@
+name: Release
+
+# Push a tag like v1.2.3 to build, test and publish a GitHub release with ready-to-run executables.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Version from tag
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}".TrimStart('v')
+          "VERSION=$v" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Test
+        run: dotnet test tests/SharkBabyDrivers.Tests -c Release -p:Version=${{ env.VERSION }}
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          $common = @('src/SharkBabyDrivers', '-c', 'Release', '-r', 'win-x64', '-p:PublishSingleFile=true',
+                      '-p:DebugType=none', "-p:Version=$env:VERSION")
+          # Light build: needs the .NET 8 Desktop Runtime installed.
+          dotnet publish @common --self-contained false -o out/light
+          # Portable build: no runtime needed, bigger.
+          dotnet publish @common --self-contained true -p:IncludeNativeLibrariesForSelfExtract=true `
+                         -p:EnableCompressionInSingleFile=true -o out/portable
+          New-Item -ItemType Directory dist | Out-Null
+          Compress-Archive out/light/SharkBabyDrivers.exe "dist/SharkBabyDrivers-$env:VERSION-win-x64.zip"
+          Compress-Archive out/portable/SharkBabyDrivers.exe "dist/SharkBabyDrivers-$env:VERSION-win-x64-portable.zip"
+          Get-ChildItem dist | ForEach-Object { "{0}  {1:N0} KB" -f $_.Name, ($_.Length / 1KB) }
+
+      - name: Create release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = @"
+          ## Downloads
+
+          | Arquivo | Para quem |
+          |---|---|
+          | ``SharkBabyDrivers-$env:VERSION-win-x64.zip`` | Leve (~200 KB). Precisa do [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). |
+          | ``SharkBabyDrivers-$env:VERSION-win-x64-portable.zip`` | Não precisa instalar nada. |
+
+          Feche os programas oficiais da Attack Shark antes de abrir. Ao conectar cada dispositivo o app faz um backup
+          do que está salvo nele antes de permitir qualquer gravação.
+          "@
+          gh release create "${{ github.ref_name }}" dist/*.zip --title "SharkBabyDrivers ${{ github.ref_name }}" --notes "$notes" --generate-notes
