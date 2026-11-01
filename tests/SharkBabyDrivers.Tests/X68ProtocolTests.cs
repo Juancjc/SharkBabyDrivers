@@ -30,10 +30,15 @@ public class X68ProtocolTests
     }
 
     [Theory]
+    [InlineData(0x01)]
     [InlineData(0xAC)]
     [InlineData(0x7F)]
     [InlineData(0xF8)]
     [InlineData(0xBA)]
+    [InlineData(0xF0)]
+    [InlineData(0xF7)]
+    [InlineData(0xFC)]
+    [InlineData(0xFF)]
     public void Dangerous_commands_are_refused(byte cmd) =>
         Assert.Throws<InvalidOperationException>(() => X68Protocol.Command([cmd]));
 

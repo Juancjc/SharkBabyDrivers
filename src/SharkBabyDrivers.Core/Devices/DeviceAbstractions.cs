@@ -7,6 +7,9 @@ public enum DeviceKind { Mouse, Keyboard }
 
 public enum LinkKind { Wired, Dongle, Bluetooth }
 
+/// <summary>The 2.4 GHz receiver is present but the device behind it is not answering (asleep, off or out of range).</summary>
+public class DeviceAsleepException(string message) : IOException(message);
+
 /// <summary>Everything that could be read from a device's onboard memory, as raw reports. This is what a backup stores.</summary>
 public sealed class DeviceSnapshot
 {

@@ -54,6 +54,162 @@ internal sealed class HidX68Transport : IX68Transport
 }
 
 /// <summary>
+/// The keyboard through its 2.4 GHz receiver (3151:5026). Same 64-byte packets as the cable, but the receiver
+/// relays them over RF and keeps the keyboard's answer in a single cache slot:
+/// <list type="number">
+/// <item>the packet is sent as-is (report id 0) and forwarded to the keyboard;</item>
+/// <item><c>F7</c> (receiver-local status) is polled until <c>has_response</c> (byte 0) is set;</item>
+/// <item><c>FC</c> copies the cached answer into the feature buffer, which is then read.</item>
+/// </list>
+/// Writes have no answer: they are forwarded, then <c>F7</c> is polled until the RF link is idle again
+/// (byte 5 = rf_ready) so pages of a bulk write never overtake each other; the keyboard then reports
+/// busy/idle (<c>0F 01</c> / <c>0F 00</c>) on the event collection, which <see cref="X68Device"/> waits on.
+/// Confirmed live on an X68 V2 (id 2901) with the 5026 receiver; matches the RY dongle firmware notes of
+/// github.com/echtzeit-solutions/monsgeek-akko-linux. Another program driving the keyboard's lights
+/// (SignalRGB does it ~25×/s) floods the link and makes most answers get lost.
+/// </summary>
+[SupportedOSPlatform("windows")]
+internal sealed class DongleX68Transport : IX68Transport
+{
+    private const byte DongleStatus = 0xF7, DongleFlush = 0xFC;
+    private const int Attempts = 16;
+    private static readonly TimeSpan AnswerTimeout = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan IdleTimeout = TimeSpan.FromMilliseconds(700);
+
+    private readonly HidConnection _config;
+    private readonly HidConnection? _events;
+    private byte[] _response = new byte[PacketLength];
+    private readonly Queue<long> _busyEvents = new();
+    private long _lastWrite;
+    public event Action<byte[]>? Event;
+
+    /// <summary>Last battery level reported by the receiver (0–100), or null before the first status.</summary>
+    public int? Battery { get; private set; }
+
+    public DongleX68Transport(IReadOnlyList<HidDeviceInfo> collections)
+    {
+        var cfg = collections.First(c => c.UsagePage == ConfigUsagePage && c.Usage == ConfigUsage && c.FeatureReportLength > 0);
+        _config = HidConnection.Open(cfg);
+        var ev = collections.FirstOrDefault(c => c.UsagePage == ConfigUsagePage && c.Usage == EventUsage && c.InputReportLength > 0);
+        if (ev is null) return;
+        try
+        {
+            _events = HidConnection.Open(ev, overlapped: true);
+            _events.InputReport += OnEvent;
+            _events.StartInputLoop();
+        }
+        catch (HidException)
+        {
+            _events = null;
+        }
+    }
+
+    public void Send(byte[] packet)
+    {
+        var cmd = packet[0];
+        // 0xF0–0xFF are handled by the receiver itself (pairing, boot loader…); the keyboard protocol never needs them.
+        if (cmd >= 0xF0 || cmd is 0x7A or 0x7F || Array.IndexOf(Forbidden, cmd) >= 0)
+            throw new InvalidOperationException($"Comando 0x{cmd:X2} não é enviado pelo receptor.");
+        var frame = new byte[PacketLength + 1];
+        packet.CopyTo(frame, 1);
+
+        if (cmd < 0x80)
+        {
+            WaitIdle();
+            Interlocked.Exchange(ref _lastWrite, Environment.TickCount64);
+            _config.SetFeature(frame);
+            WaitIdle();
+            _response = new byte[PacketLength];
+            return;
+        }
+
+        // The answer sits in the receiver's single cache slot only briefly, so the status is polled back-to-back.
+        // Answers can get lost, come back as zeros or (right after the receiver is opened) as leftovers of an
+        // older exchange, so one is accepted only once it was seen identically twice — three times when it is
+        // all zeros. The cost is one extra round trip (~20 ms) per read.
+        var seen = new Dictionary<string, int>();
+        for (var attempt = 0; attempt < Attempts; attempt++)
+        {
+            WaitIdle();
+            _config.SetFeature(frame);
+            var answer = Await();
+            if (answer is null) continue;
+            var hex = Convert.ToHexString(answer);
+            var count = seen[hex] = seen.GetValueOrDefault(hex) + 1;
+            if (count >= (answer.AsSpan().IndexOfAnyExcept((byte)0) < 0 ? 3 : 2)) { _response = answer; return; }
+        }
+        if (ForeignTraffic)
+            throw new IOException("Outro programa está controlando as luzes do teclado pelo receptor (ex.: SignalRGB) e as respostas se perdem. Feche-o ou desative o teclado nele e tente de novo.");
+        throw new DeviceAsleepException($"O teclado não respondeu pelo receptor (comando 0x{cmd:X2}). Aperte uma tecla para acordá-lo (ele precisa estar ligado no modo 2.4G).");
+    }
+
+    public byte[] Receive() => _response;
+
+    private void OnEvent(byte[] r)
+    {
+        if (r.Length > 1 && r[1] == 0x0F)
+        {
+            var now = Environment.TickCount64;
+            lock (_busyEvents)
+            {
+                // Only writes make the keyboard report busy/idle: reports with no write of ours nearby mean
+                // someone else is writing to it.
+                if (now - Interlocked.Read(ref _lastWrite) > 1000) _busyEvents.Enqueue(now);
+                while (_busyEvents.Count > 0 && now - _busyEvents.Peek() > 3000) _busyEvents.Dequeue();
+            }
+        }
+        Event?.Invoke(r);
+    }
+
+    /// <summary>True when another program keeps writing to the keyboard (busy reports nobody here asked for).</summary>
+    public bool ForeignTraffic
+    {
+        get { lock (_busyEvents) return _busyEvents.Count > 10 && Environment.TickCount64 - _busyEvents.Last() < 3000; }
+    }
+
+    private byte[]? Await()
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.Elapsed < AnswerTimeout)
+        {
+            if (Status()[0] == 0) continue;
+            _config.SetFeature(Local(DongleFlush));
+            return _config.GetFeature(0x00, PacketLength + 1)[1..];
+        }
+        return null;
+    }
+
+    private byte[] Status()
+    {
+        _config.SetFeature(Local(DongleStatus));
+        var s = _config.GetFeature(0x00, PacketLength + 1)[1..];
+        if (s[1] <= 100) Battery = s[1];
+        return s;
+    }
+
+    /// <summary>Waits until the receiver is not waiting on the keyboard (rf_ready).</summary>
+    private void WaitIdle()
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.Elapsed < IdleTimeout && Status()[5] == 0) Thread.Sleep(2);
+    }
+
+    private static byte[] Local(byte cmd)
+    {
+        var f = new byte[PacketLength + 1];
+        f[1] = cmd;
+        f[8] = (byte)(0xFF - cmd);
+        return f;
+    }
+
+    public void Dispose()
+    {
+        _events?.Dispose();
+        _config.Dispose();
+    }
+}
+
+/// <summary>
 /// In-memory model of the RY5088 firmware used by tests and the --demo mode. It answers GET commands from an
 /// <see cref="X68Image"/>, applies SET commands to it, and rejects any packet with a wrong checksum or layout —
 /// so it doubles as a strict validator of what the app would send to a real keyboard.

@@ -183,7 +183,9 @@
                     </DockPanel>
                     <ContentControl Content="{Binding}" ContentTemplate="{StaticResource Board}" Margin="0,0,0,14"/>
 
-                    <Border Style="{StaticResource Card}" IsEnabled="{Binding HasSelection}">
+                    <TextBlock Text="{l:T kb_he_wireless_locked}" Style="{StaticResource Hint}" Foreground="{StaticResource Warn}" Margin="0,0,0,8"
+                               Visibility="{Binding HeLocked, Converter={StaticResource VisIf}}"/>
+                    <Border Style="{StaticResource Card}" IsEnabled="{Binding HeEditable}">
                         <StackPanel>
                             <DockPanel>
                                 <ToggleButton DockPanel.Dock="Right" Style="{StaticResource BaseButton}" IsChecked="{Binding Calibrating, Mode=OneWay}" Command="{Binding CalibrateCommand}">

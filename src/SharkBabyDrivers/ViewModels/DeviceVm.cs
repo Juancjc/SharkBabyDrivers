@@ -19,6 +19,13 @@ public sealed class BackupItemVm(BackupEntry entry)
     public string Summary => Entry.Snapshot.Notes.GetValueOrDefault("summary") ?? Entry.Snapshot.Firmware;
 }
 
+public sealed class SavedProfileVm(SavedProfile profile)
+{
+    public SavedProfile Profile { get; } = profile;
+    public string Name => Profile.Name;
+    public string When => Profile.SavedAt.ToString("g");
+}
+
 /// <summary>
 /// Base for every device page. Enforces the rule of the app: the configuration stored inside the device is
 /// read and backed up BEFORE anything can be written to it.
@@ -35,6 +42,9 @@ public abstract class DeviceVm : ObservableObject, IDisposable
 
     public ISharkDevice Device { get; }
     public ObservableCollection<BackupItemVm> BackupList { get; } = new();
+    public ObservableCollection<SavedProfileVm> SavedProfiles { get; } = new();
+    private string _newProfileName = "";
+    public string NewProfileName { get => _newProfileName; set => Set(ref _newProfileName, value); }
 
     protected DeviceVm(ISharkDevice device)
     {
@@ -42,10 +52,13 @@ public abstract class DeviceVm : ObservableObject, IDisposable
         ApplyCommand = new AsyncCommand(ApplyAsync, () => CanWrite && IsDirty);
         DiscardCommand = new RelayCommand(Discard, () => IsDirty && !Busy);
         RetryCommand = new AsyncCommand(InitializeAsync, () => !Busy);
-        BackupNowCommand = new AsyncCommand(BackupNowAsync, () => State == DeviceState.Ready && !Busy);
         RestoreCommand = new AsyncCommand(p => RestoreAsync(((BackupItemVm)p!).Entry.Snapshot), p => p is BackupItemVm && CanWrite);
         ExportBackupCommand = new RelayCommand(p => ExportBackup((BackupItemVm)p!), p => p is BackupItemVm);
-        ImportBackupCommand = new AsyncCommand(ImportBackupAsync, () => CanWrite);
+        SaveProfileCommand = new RelayCommand(SaveProfile, () => IsReady);
+        LoadProfileCommand = new RelayCommand(p => LoadSavedProfile((SavedProfileVm)p!), p => p is SavedProfileVm && IsReady && !Busy);
+        DeleteProfileCommand = new RelayCommand(p => DeleteProfile((SavedProfileVm)p!), p => p is SavedProfileVm);
+        ExportProfileCommand = new RelayCommand(ExportProfile, () => IsReady);
+        ImportProfileCommand = new RelayCommand(ImportProfile, () => IsReady && !Busy);
         OpenBackupFolderCommand = new RelayCommand(() =>
         {
             var folder = Backups.Folder(Device.DeviceKey);
@@ -89,10 +102,13 @@ public abstract class DeviceVm : ObservableObject, IDisposable
     public AsyncCommand ApplyCommand { get; }
     public RelayCommand DiscardCommand { get; }
     public AsyncCommand RetryCommand { get; }
-    public AsyncCommand BackupNowCommand { get; }
     public AsyncCommand RestoreCommand { get; }
     public RelayCommand ExportBackupCommand { get; }
-    public AsyncCommand ImportBackupCommand { get; }
+    public RelayCommand SaveProfileCommand { get; }
+    public RelayCommand LoadProfileCommand { get; }
+    public RelayCommand DeleteProfileCommand { get; }
+    public RelayCommand ExportProfileCommand { get; }
+    public RelayCommand ImportProfileCommand { get; }
     public RelayCommand OpenBackupFolderCommand { get; }
 
     protected void MarkDirty() => IsDirty = true;
@@ -106,7 +122,7 @@ public abstract class DeviceVm : ObservableObject, IDisposable
         catch (TaskCanceledException) { }
     }
 
-    /// <summary>Reads the device, saves a backup (the first becomes ORIGINAL) and loads the editor.</summary>
+    /// <summary>Reads the device, saves the ORIGINAL backup if the device has none yet, and loads the editor.</summary>
     public async Task InitializeAsync()
     {
         Busy = true;
@@ -118,14 +134,15 @@ public abstract class DeviceVm : ObservableObject, IDisposable
             var snapshot = await Device.ReadSnapshotAsync(progress);
             snapshot.AppVersion = App.Version;
             Annotate(snapshot);
-            var saved = Backups.Save(snapshot);
+            var saved = Backups.SaveOriginal(snapshot);
             LoadFromSnapshot(snapshot);
             RefreshBackups();
+            RefreshProfiles();
             OnPropertyChanged(nameof(HasBackup));
             State = DeviceState.Ready;
             StatusText = "";
             IsDirty = false;
-            if (saved.IsOriginal) ShowToast($"{Loc.T("backup_done")} — {Loc.T("backup_original")}");
+            if (saved is not null) ShowToast(Loc.T("backup_done"));
         }
         catch (NotSupportedException ex)
         {
@@ -135,8 +152,9 @@ public abstract class DeviceVm : ObservableObject, IDisposable
         catch (Exception ex)
         {
             App.Log(ex);
-            State = ex is Core.Devices.X11.MouseAsleepException ? DeviceState.WaitingWake : DeviceState.Error;
+            State = ex is DeviceAsleepException ? DeviceState.WaitingWake : DeviceState.Error;
             StatusText = ex.Message;
+            if (State == DeviceState.WaitingWake) _ = RetryWhenAwakeAsync();
         }
         finally
         {
@@ -144,24 +162,78 @@ public abstract class DeviceVm : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>Wake hint for the waiting banner.</summary>
+    public string WakeHint => Loc.T(Device.Kind == DeviceKind.Mouse ? "wake_hint" : "wake_hint_kb");
+
+    private bool _disposed;
+
+    /// <summary>While the device sleeps behind its receiver, keep trying every few seconds until it answers.</summary>
+    private async Task RetryWhenAwakeAsync()
+    {
+        await Task.Delay(3000);
+        if (!_disposed && State == DeviceState.WaitingWake && !Busy) await InitializeAsync();
+    }
+
     protected void RefreshBackups()
     {
         BackupList.Clear();
-        foreach (var e in Backups.List(Device.DeviceKey)) BackupList.Add(new BackupItemVm(e));
+        if (Backups.Original(Device.DeviceKey) is { } e) BackupList.Add(new BackupItemVm(e));
     }
 
-    private async Task BackupNowAsync()
+    // ------------------------------------------------------------------ saved profiles
+
+    protected void RefreshProfiles()
     {
-        Busy = true;
-        try
-        {
-            var snap = await Device.ReadSnapshotAsync();
-            snap.AppVersion = App.Version;
-            Backups.Save(snap);
-            RefreshBackups();
-            ShowToast(Loc.T("backup_done"));
-        }
-        finally { Busy = false; }
+        SavedProfiles.Clear();
+        foreach (var p in ProfileLibrary.List(Device.Model)) SavedProfiles.Add(new SavedProfileVm(p));
+    }
+
+    private void SaveProfile()
+    {
+        var name = NewProfileName.Trim();
+        if (name.Length == 0)
+            name = Enumerable.Range(1, 999).Select(i => Loc.F("profile_default_name", i)).First(n => !ProfileLibrary.Exists(Device.Model, n));
+        if (ProfileLibrary.Exists(Device.Model, name) && !App.Confirm(Loc.F("profile_overwrite_confirm", name))) return;
+        ProfileLibrary.Save(Device.Model, name, CaptureProfile());
+        NewProfileName = "";
+        RefreshProfiles();
+        ShowToast(Loc.F("profile_saved", name));
+    }
+
+    private void LoadSavedProfile(SavedProfileVm item)
+    {
+        LoadProfileFile(item.Profile.Path);
+        MarkDirty();
+        ShowToast(Loc.F("profile_loaded", item.Name));
+    }
+
+    private void DeleteProfile(SavedProfileVm item)
+    {
+        if (!App.Confirm(Loc.F("profile_delete_confirm", item.Name))) return;
+        ProfileLibrary.Delete(item.Profile);
+        RefreshProfiles();
+    }
+
+    private void ExportProfile()
+    {
+        var dlg = new SaveFileDialog { Filter = Loc.T("file_filter_profile"), FileName = AppPaths.SafeName(Device.Model) + ProfileLibrary.Extension };
+        if (dlg.ShowDialog() == true) JsonStore.Save(dlg.FileName, CaptureProfile());
+    }
+
+    /// <summary>Loads a profile file into the editor and keeps a copy in the library.</summary>
+    private void ImportProfile()
+    {
+        var dlg = new OpenFileDialog { Filter = Loc.T("file_filter_profile") };
+        if (dlg.ShowDialog() != true) return;
+        LoadProfileFile(dlg.FileName);
+        var name = Path.GetFileName(dlg.FileName);
+        name = name.EndsWith(ProfileLibrary.Extension, StringComparison.OrdinalIgnoreCase)
+            ? name[..^ProfileLibrary.Extension.Length]
+            : Path.GetFileNameWithoutExtension(name);
+        if (!ProfileLibrary.Exists(Device.Model, name)) ProfileLibrary.Save(Device.Model, name, CaptureProfile());
+        RefreshProfiles();
+        MarkDirty();
+        ShowToast(Loc.T("profile_imported"));
     }
 
     private async Task ApplyAsync()
@@ -189,10 +261,6 @@ public abstract class DeviceVm : ObservableObject, IDisposable
         StatusText = Loc.T("applying");
         try
         {
-            // Safety: keep what is on the device right now before overwriting it.
-            var current = await Device.ReadSnapshotAsync();
-            current.AppVersion = App.Version;
-            Backups.Save(current);
             await Device.RestoreSnapshotAsync(snapshot, new Progress<string>(s => StatusText = $"{Loc.T("applying")} ({s})"));
             await RestoreExtrasAsync(snapshot);
         }
@@ -215,16 +283,6 @@ public abstract class DeviceVm : ObservableObject, IDisposable
         if (dlg.ShowDialog() == true) Backups.Export(item.Entry, dlg.FileName);
     }
 
-    private async Task ImportBackupAsync()
-    {
-        var dlg = new OpenFileDialog { Filter = Loc.T("file_filter_backup") };
-        if (dlg.ShowDialog() != true) return;
-        var snap = Backups.Import(dlg.FileName);
-        if (snap.Model != Device.Model)
-            throw new InvalidDataException($"Este backup é de \"{snap.Model}\", não de \"{Device.Model}\".");
-        await RestoreAsync(snap);
-    }
-
     private void Discard()
     {
         DiscardChanges();
@@ -236,15 +294,24 @@ public abstract class DeviceVm : ObservableObject, IDisposable
     protected abstract void LoadFromSnapshot(DeviceSnapshot snapshot);
     protected abstract Task WriteChangesAsync();
     protected abstract void DiscardChanges();
+    /// <summary>The editor's current settings in the profile file format of this device.</summary>
+    protected abstract object CaptureProfile();
+    /// <summary>Loads a profile file into the editor (nothing is written until Apply).</summary>
+    protected abstract void LoadProfileFile(string path);
     /// <summary>Restores what the snapshot cannot carry (e.g. app-side parts). Default: nothing.</summary>
     protected virtual Task RestoreExtrasAsync(DeviceSnapshot snapshot) => Task.CompletedTask;
     protected virtual void OnLanguageChanged()
     {
         OnPropertyChanged(nameof(KindText));
         OnPropertyChanged(nameof(LinkText));
+        OnPropertyChanged(nameof(WakeHint));
     }
 
-    public virtual void Dispose() => _toastCts?.Cancel();
+    public virtual void Dispose()
+    {
+        _disposed = true;
+        _toastCts?.Cancel();
+    }
 }
 
 /// <summary>Device that is detected but cannot be configured over its current connection.</summary>
@@ -254,4 +321,6 @@ public sealed class UnsupportedDeviceVm : DeviceVm
     protected override void LoadFromSnapshot(DeviceSnapshot snapshot) { }
     protected override Task WriteChangesAsync() => Task.CompletedTask;
     protected override void DiscardChanges() { }
+    protected override object CaptureProfile() => new();
+    protected override void LoadProfileFile(string path) { }
 }

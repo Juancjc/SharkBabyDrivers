@@ -23,7 +23,7 @@ public static class X68Protocol
     public const int PageData = 56;
 
     // ---- command bytes (GET = SET | 0x80) ----
-    public const byte SetReset = 0x01;            // factory reset (only on explicit user request)
+    public const byte SetReset = 0x01;            // documented only; blocked by the app
     public const byte SetReport = 0x03, GetReport = 0x83;
     public const byte SetProfile = 0x04, GetProfile = 0x84;
     public const byte GetLedOnOff = 0x85;
@@ -43,8 +43,8 @@ public static class X68Protocol
     public const byte GetRfVersion = 0x80;
     public const byte GetUsbVersion = 0x8F;
 
-    /// <summary>Commands this app must never emit (flash erase, boot loaders, firmware upgrade).</summary>
-    public static readonly byte[] Forbidden = [0xAC, 0x7F, 0xF8, 0xBA];
+    /// <summary>Commands this app must never emit (reset, flash erase, pairing, boot loaders, firmware upgrade).</summary>
+    public static readonly byte[] Forbidden = [SetReset, 0xAC, 0x7F, 0xF8, 0xBA];
 
     /// <summary>"Bit7" checksum: byte 7 = 0xFF − (sum(bytes 0..6) &amp; 0xFF).</summary>
     public static void SealBit7(byte[] p) => p[7] = (byte)(0xFF - (Sum(p, 0, 7) & 0xFF));
@@ -63,7 +63,7 @@ public static class X68Protocol
     public static byte[] Command(ReadOnlySpan<byte> header, ReadOnlySpan<byte> payload = default, bool bit8 = false)
     {
         if (header.Length == 0) throw new ArgumentException("comando vazio");
-        if (Array.IndexOf(Forbidden, header[0]) >= 0) throw new InvalidOperationException($"Comando 0x{header[0]:X2} bloqueado por segurança.");
+        if (header[0] >= 0xF0 || Array.IndexOf(Forbidden, header[0]) >= 0) throw new InvalidOperationException($"Comando 0x{header[0]:X2} bloqueado por segurança.");
         var p = new byte[PacketLength];
         header[..Math.Min(header.Length, bit8 ? 8 : 7)].CopyTo(p);
         payload.CopyTo(p.AsSpan(bit8 ? 9 : 8));

@@ -179,8 +179,6 @@ public sealed class X11Vm : DeviceVm
     public RelayCommand ClearMacroCommand { get; }
     public RelayCommand RemoveStepCommand { get; }
     public RelayCommand InsertClickCommand { get; }
-    public RelayCommand ExportProfileCommand { get; }
-    public RelayCommand ImportProfileCommand { get; }
     public AsyncCommand FactoryResetCommand { get; }
 
     public X11Vm(X11Device device) : base(device)
@@ -236,8 +234,6 @@ public sealed class X11Vm : DeviceVm
             SelectedMacro?.Add(X11Macro.MouseLeft, false, 30);
             Changed();
         }, () => SelectedMacro is not null);
-        ExportProfileCommand = new RelayCommand(ExportProfile, () => IsReady);
-        ImportProfileCommand = new RelayCommand(ImportProfile, () => IsReady);
         FactoryResetCommand = new AsyncCommand(FactoryResetAsync, () => CanWrite);
     }
 
@@ -493,10 +489,8 @@ public sealed class X11Vm : DeviceVm
 
     // ------------------------------------------------------------------ profile files
 
-    private void ExportProfile()
+    protected override object CaptureProfile()
     {
-        var dlg = new SaveFileDialog { Filter = Loc.T("file_filter_profile"), FileName = "x11.sbd.json" };
-        if (dlg.ShowDialog() != true) return;
         var p = Profile.Clone();
         p.Reports = new Dictionary<string, string>
         {
@@ -505,14 +499,12 @@ public sealed class X11Vm : DeviceVm
             ["report_06"] = Convert.ToHexString(Working.Poll),
         };
         p.ButtonsWritten = false;
-        JsonStore.Save(dlg.FileName, p);
+        return p;
     }
 
-    private void ImportProfile()
+    protected override void LoadProfileFile(string path)
     {
-        var dlg = new OpenFileDialog { Filter = Loc.T("file_filter_profile") };
-        if (dlg.ShowDialog() != true) return;
-        var p = JsonStore.LoadOrDefault<X11AppProfile?>(dlg.FileName, () => null) ?? throw new InvalidDataException("Perfil inválido.");
+        var p = JsonStore.LoadOrDefault<X11AppProfile?>(path, () => null) ?? throw new InvalidDataException("Perfil inválido.");
         if (p.Reports is { } r)
             Working = new X11Config(Convert.FromHexString(r["report_04"]), Convert.FromHexString(r["report_05"]), Convert.FromHexString(r["report_06"]));
         p.Reports = null;
@@ -521,16 +513,13 @@ public sealed class X11Vm : DeviceVm
         ReloadMacros();
         BuildActionOptions();
         foreach (var b in Buttons) b.Refresh();
+        foreach (var s in Stages) s.Refresh();
         Changed();
-        ShowToast(Loc.T("profile_imported"));
     }
 
     private async Task FactoryResetAsync()
     {
         if (!App.Confirm(Loc.T("factory_reset_confirm"))) return;
-        var snap = await _mouse.ReadSnapshotAsync();
-        snap.AppVersion = App.Version;
-        Backups.Save(snap);
         await _mouse.RunAsync(_mouse.FactoryReset);
         Profile = new X11AppProfile { ButtonsWritten = true };
         Profile.Save(Device.DeviceKey);

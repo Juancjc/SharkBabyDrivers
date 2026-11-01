@@ -130,8 +130,6 @@ public sealed class X68Vm : DeviceVm
     public AsyncCommand ActivateProfileCommand { get; }
     public AsyncCommand CalibrateCommand { get; }
     public AsyncCommand FactoryResetCommand { get; }
-    public RelayCommand ExportProfileCommand { get; }
-    public RelayCommand ImportProfileCommand { get; }
 
     public X68Vm(X68Device device) : base(device)
     {
@@ -166,11 +164,9 @@ public sealed class X68Vm : DeviceVm
             Img.ActiveProfile = _original.ActiveProfile = EditProfile;
             OnPropertyChanged(nameof(IsEditingActive));
             OnPropertyChanged(nameof(ActiveProfileText));
-        }, () => CanWrite && !IsEditingActive);
-        CalibrateCommand = new AsyncCommand(ToggleCalibrationAsync, () => CanWrite || Calibrating);
-        FactoryResetCommand = new AsyncCommand(FactoryResetAsync, () => CanWrite);
-        ExportProfileCommand = new RelayCommand(ExportProfile, () => IsReady);
-        ImportProfileCommand = new RelayCommand(ImportProfile, () => IsReady);
+        }, () => CanWrite && !IsEditingActive && _kb.CanSwitchProfiles);
+        CalibrateCommand = new AsyncCommand(ToggleCalibrationAsync, () => (CanWrite && !IsWireless) || Calibrating);
+        FactoryResetCommand = new AsyncCommand(FactoryResetAsync, () => false);
     }
 
     // ------------------------------------------------------------------ profile / layer / selection
@@ -188,6 +184,10 @@ public sealed class X68Vm : DeviceVm
     }
 
     public bool IsEditingActive => EditProfile == Img.ActiveProfile;
+    /// <summary>Connected through the 2.4G receiver: no profile switch, so Hall Effect only on the active profile.</summary>
+    public bool IsWireless => !_kb.CanSwitchProfiles;
+    public bool HeLocked => IsWireless && !(IsEditingActive && X68Device.HeWasRead(_original, EditProfile));
+    public bool HeEditable => HasSelection && !HeLocked;
     public string ActiveProfileText => Loc.F("kb_active_profile", Img.ActiveProfile + 1);
 
     public KeyLayer Layer
@@ -256,6 +256,8 @@ public sealed class X68Vm : DeviceVm
     {
         OnPropertyChanged(nameof(SelectedCount));
         OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(HeEditable));
+        OnPropertyChanged(nameof(HeLocked));
         LoadHeEditor();
     }
 
@@ -593,9 +595,15 @@ public sealed class X68Vm : DeviceVm
         // Profile switched with Fn on the keyboard: follow it (no write involved).
         if (e[1] == 0x01 && e.Length > 2 && e[2] < Profiles)
         {
-            Img.ActiveProfile = _original.ActiveProfile = e[2];
+            Img.ActiveProfile = e[2];
+            // Keep the baseline's profile while edits are pending so the write preflight can detect
+            // that HE would otherwise be applied to a different physical profile.
+            if (!IsWireless || !IsDirty) _original.ActiveProfile = e[2];
             OnPropertyChanged(nameof(ActiveProfileText));
             OnPropertyChanged(nameof(IsEditingActive));
+            OnSelectionChanged();
+            // Wirelessly only the active profile's Hall Effect is known: read the new one (unless there are edits).
+            if (IsWireless && !IsDirty && !X68Device.HeWasRead(_original, e[2])) _ = InitializeAsync();
         }
     }
 
@@ -634,10 +642,9 @@ public sealed class X68Vm : DeviceVm
 
     protected override async Task WriteChangesAsync()
     {
-        foreach (var m in Macros) Img.Macros[m.Index] = m.Encode();
-        var desired = Img.Clone();
+        var desired = CaptureEditorImage();
         var before = _original;
-        await _kb.RunAsync(() => _kb.WriteImage(desired, before));
+        await _kb.RunAsync(() => _kb.WriteImageVerified(desired, before));
         _original = desired.Clone();
     }
 
@@ -659,34 +666,47 @@ public sealed class X68Vm : DeviceVm
         OnPropertyChanged(string.Empty);
     }
 
-    private void ExportProfile()
+    protected override object CaptureProfile()
     {
-        var dlg = new SaveFileDialog { Filter = Loc.T("file_filter_profile"), FileName = "x68.sbd.json" };
-        if (dlg.ShowDialog() != true) return;
-        foreach (var m in Macros) Img.Macros[m.Index] = m.Encode();
-        JsonStore.Save(dlg.FileName, Img.ToSnapshot(Device.DeviceKey, Device.Model));
+        return CaptureEditorImage().ToSnapshot(Device.DeviceKey, Device.Model);
     }
 
-    private void ImportProfile()
+    private X68Image CaptureEditorImage()
     {
-        var dlg = new OpenFileDialog { Filter = Loc.T("file_filter_profile") };
-        if (dlg.ShowDialog() != true) return;
-        var snap = JsonStore.LoadOrDefault<DeviceSnapshot?>(dlg.FileName, () => null) ?? throw new InvalidDataException("Perfil inválido.");
+        foreach (var m in Macros) Img.Macros[m.Index] = m.Encode();
+        var img = Img.Clone();
+        if (IsWireless)
+            for (var profile = 0; profile < Profiles; profile++)
+                // Display getters can create default tables for profiles that were never read.
+                // Neither a saved file nor the new baseline may claim those tables came from hardware.
+                if (!X68Device.HeWasRead(_original, profile)) img.HallEffect[profile].Clear();
+        return img;
+    }
+
+    protected override void LoadProfileFile(string path)
+    {
+        var snap = JsonStore.LoadOrDefault<DeviceSnapshot?>(path, () => null) ?? throw new InvalidDataException("Perfil inválido.");
         var img = X68Image.FromSnapshot(snap);
         // Keep identity/firmware of the connected keyboard; take every setting from the file.
         img.DeviceId = Img.DeviceId; img.UsbFirmware = Img.UsbFirmware; img.RfFirmware = Img.RfFirmware;
+        if (IsWireless)
+        {
+            img.ActiveProfile = _original.ActiveProfile;
+        }
+        for (var profile = 0; profile < Profiles; profile++)
+            if (IsWireless && profile != img.ActiveProfile) img.HallEffect[profile].Clear();
+            else
+                // A wireless file may contain HE for a different profile only. Missing tables are
+                // left as they are on the connected keyboard, rather than filled with UI defaults.
+                foreach (var (op, table) in _original.HallEffect[profile])
+                    if (!img.HallEffect[profile].ContainsKey(op)) img.HallEffect[profile][op] = (byte[])table.Clone();
         Img = img;
         RebuildAll();
-        MarkDirty();
-        ShowToast(Loc.T("profile_imported"));
     }
 
     private async Task FactoryResetAsync()
     {
         if (!App.Confirm(Loc.T("factory_reset_confirm"))) return;
-        var snap = await _kb.ReadSnapshotAsync();
-        snap.AppVersion = App.Version;
-        Backups.Save(snap);
         await _kb.RunAsync(_kb.FactoryReset);
         await InitializeAsync();
     }

@@ -74,7 +74,7 @@
                         <DockPanel>
                             <Button DockPanel.Dock="Right" Content="{l:T retry}" Command="{Binding RetryCommand}"/>
                             <TextBlock Text="&#xE962;" Style="{StaticResource Icon}" Foreground="{StaticResource Warn}" Margin="0,0,10,0"/>
-                            <TextBlock Text="{l:T wake_hint}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding WakeHint}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                         </DockPanel>
                     </Border>
                 </StackPanel>

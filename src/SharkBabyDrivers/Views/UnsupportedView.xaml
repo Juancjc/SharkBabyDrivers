@@ -9,8 +9,8 @@
                     <TextBlock Text="&#xE765;" Style="{StaticResource Icon}" FontSize="26" HorizontalAlignment="Center"/>
                 </Border>
                 <StackPanel>
-                    <TextBlock Text="{l:T kb_dongle_title}" Style="{StaticResource H2}"/>
-                    <TextBlock Text="{l:T kb_dongle_text}" Style="{StaticResource Hint}" FontSize="13.5" Margin="0,4,0,0"/>
+                    <TextBlock Text="{l:T unsupported_device_title}" Style="{StaticResource H2}"/>
+                    <TextBlock Text="{l:T unsupported_device_text}" Style="{StaticResource Hint}" FontSize="13.5" Margin="0,4,0,0"/>
                 </StackPanel>
             </DockPanel>
         </Border>

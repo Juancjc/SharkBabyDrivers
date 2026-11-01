@@ -1,8 +1,10 @@
 # ATTACK SHARK X68 PRO HE — HID protocol (reverse-engineered from "Attack Shark Driver v4" 3.1.12)
 
-Scope: everything below was derived statically from the vendor installer
-`ATTACK SHARK X68PROHE SOFT.exe`. Nothing was sent to the real keyboard.
-Confidence tags: **[CODE]** = read directly from code, **[INF]** = inferred, **[UNVERIFIED]** = needs a live test / USB capture.
+Scope: the wired protocol was derived statically from the vendor installer
+`ATTACK SHARK X68PROHE SOFT.exe`. The 2.4 GHz transport in §5 was subsequently confirmed on a real X68 V2
+(device id 2901) with the `3151:5026` receiver; it replaces the earlier, incorrect static interpretation.
+Confidence tags: **[CODE]** = read directly from code, **[LIVE]** = confirmed on that keyboard/receiver,
+**[INF]** = inferred, **[UNVERIFIED]** = needs a live test / USB capture.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -20,13 +22,12 @@ Confidence tags: **[CODE]** = read directly from code, **[INF]** = inferred, **[
 * Device is identified by **command 0x8F** → `uint32 LE deviceId @resp[1..4]`, `uint16 LE fw version @resp[7..8]`.
   X68 PRO HE = **deviceId 2370** (`ry5088_x68_8k_002`) or **2901** (`ry5088_x68v2_8k`, has an F-row in the matrix).
   Wired USB = **VID 0x3151 PID 0x502F** (8 kHz). **[CODE]**
-* The keyboard you have plugged in (`3151:5026`) is **not** the wired keyboard: 0x5026 is a **2.4 GHz "dongle_common"
-  receiver (1 kHz)**. Talking *through* the dongle needs the extra dongle framing in §5 (partially reversed,
-  **[UNVERIFIED]**). The cable path (§2–§4) is fully known. Recommendation: implement and test backup over the USB cable
-  first; add the dongle path after a USB capture confirms §5.
+* `3151:5026` is a **2.4 GHz "dongle_common" receiver (1 kHz)**. It forwards the same 64-byte keyboard packets
+  without a prefix; retrieving an RF response needs the receiver-local `F7`/`FC` sequence in §5. **[LIVE]**
 * **Onboard profiles: 4** (`layer: 4`). Key matrix / Fn layer GETs take an explicit profile index;
-  **HE (magnetic switch) tables and probably lighting apply to the *active* profile only** — to back up all 4 you must
-  switch profile with 0x04, read, and switch back (§7).
+  **HE (magnetic switch) tables and probably lighting apply to the *active* profile only**. Over USB, reading HE for
+  all four requires selecting each profile and restoring the original (§7). **Never send 0x04 over the dongle**:
+  it has locked up the keyboard until power-cycled. Wireless reads/writes cover HE of the active profile only.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -114,7 +115,7 @@ offset: 0    1..6          7         8..63
 
 | Cmd | Name | Dir | Packet (bytes not listed = 0) | Response |
 |---|---|---|---|---|
-| 0x01 | SET_RESET (factory reset) | W | 64-byte `[0x01]`, Bit7, then sleep 2 s | – |
+| 0x01 | SET_RESET (factory reset) | ⚠ | vendor command; **blocked by the app on every link, never send** | – |
 | 0x03 | SET_REPORT (polling rate) | W | `[2]=code` (0=8000,1=4000,2=2000,3=1000,4=500,5=250,6=125 Hz) | – |
 | 0x83 | GET_REPORT | R | `[0x83]` | `resp[2]=code` |
 | 0x04 | SET_PROFILE | W | `[1]=profile 0..3` | – |
@@ -250,32 +251,64 @@ Calibration: start = `0x1C 1`, `0x1C 0`, `0x1E 1`, then poll `0xE5 op 254` (4 pa
 
 ---------------------------------------------------------------------------------------------------
 
-## 5. 2.4 GHz dongle path (`3151:5026`) — from `iot_driver.exe` (dangle_common.rs) **[UNVERIFIED]**
+## 5. 2.4 GHz dongle path (`3151:5026`) **[LIVE]**
 
-What the code does (addresses are VAs in iot_driver.exe, image base 0x400000):
-1. Dongle is opened on its interface 2 (UsagePage 0xFFFF, Usage 2). Same 64-byte feature reports + checksum.
-2. Before forwarding a command to the paired device (`DangleCommon` send, fn 0x5b4d20, dangle_common.rs:65):
-   * **`[0xF6, sel]`** (Bit7) — select RF target, `sel = (0x000D050A >> (8*dangleType)) & 0xFF` →
-     DangleDevType None(0)=0x0A, **Keyboard(1)=0x05**, Mouse(2)=0x0D. Sent only when the target changes (cached at dev+0x9d),
-     followed by a 5 ms sleep. (fn 0x5aba00, mod.rs:499-511)
-   * **`[0xFE, 0x08]`** (Bit7) then 10 ms sleep (fn 0x5ab7e0, mod.rs:395). The read path uses **`[0xFE, 0x0C]`**.
-   * the actual message is sent with **one prefix byte** in front (value = CMDList byte at +0x1d; by declaration order this is
-     0x0E — **uncertain**), checksum then computed over `buf[1..7]` → `buf[8]` (i.e. still at msg[7]).
-   * then iot_driver polls **`0xF7`** until the dongle reports "write finished" (inline strings `"f7 wait write 完成"`,
-     `"dev is not online"`; status struct fields `is_online`, `is_write_finish`, `battery`, `keyboard_id`, `mouse_id`).
-3. Read path (fn 0x5b5370, dangle_common.rs:81-100): `[0xF6,sel]` (if changed) → `[0xFE,0x0C]` → single-byte `[0xFD]` →
-   GetFeature; a response starting `AA 55` is treated as a status/notification frame.
-4. Dongle-local queries seen in JS: `0xF0` → dongle USB fw `resp[1..2]` (only for company "cherry"), `0x80` → dongle RF
-   version, `0xF1` → own device id `resp[2]<<8|resp[1]` (only dongle PIDs 0x5007/0x5020/0x503F/0x5040/0x504B and 347A:A302 —
-   **not** 0x5026), `0xF7` → boot/status (`resp[7]`,`resp[8]`).
-5. The app pauses iot_driver's background dongle polling around transactions: `changeWirelessLoopStatus(lock=true/false)`.
-6. Wireless device id in JS = `keyboardId & 0xFFFF` from the status; then the same RY5088 class is used, so **all
-   commands in §4 are identical once the dongle framing is applied**.
+Implemented by `DongleX68Transport` in `src/SharkBabyDrivers.Core/Devices/X68/X68Transport.cs`.
+Open the config collection **FFFF/0002** and the event collection **FFFF/0001**. Windows feature buffers contain
+**Report ID 0 + 64 data bytes**. The keyboard command and checksum are identical to the wired packet: there is
+**no 0x0E prefix**, no `FE` setup, and no `FD` response retrieval.
 
-Recommendation: capture one session of the original app with USBPcap+Wireshark on the dongle (read-only screens: open the
-app, let it read lights/keys) to confirm prefix byte, 0xFE/0xFD/0xF7 semantics and response timing before writing anything.
-Alternative zero-risk option: ship SharkBabyDrivers with iot_driver.exe as the transport (it is a localhost gRPC server whose
-`.proto` is fully recoverable from `snippets\16_proto_enums.js` / index.js 42000-43470).
+### 5.1 GET transaction
+
+1. Wait for receiver-local `F7` status byte 5 (`rf_ready`) to become nonzero before forwarding a command.
+2. Send the keyboard's 64-byte GET packet directly with Report ID 0.
+3. Poll `F7` with back-to-back SetFeature/GetFeature calls, **without a sleep**, until status byte 0
+   (`has_response`) is nonzero. The response cache has only one slot, so delaying can lose the answer.
+4. Send receiver-local `FC` and immediately GetFeature to obtain the cached 64-byte keyboard answer.
+5. Repeat the same GET until an identical answer has been seen **twice**, or **three times for an all-zero answer**.
+   Raw table pages have no command echo, and stale or zero replies occur; a single answer is insufficient.
+
+Current bounds: 250 ms for each response wait, 16 attempts per GET; the pre-send idle wait is bounded at 700 ms
+with 2 ms intervals. Offsets below exclude the Report ID byte. Local packets use Bit7 checksum (`F7` → `08`,
+`FC` → `03` at data byte 7).
+
+| `F7` data byte | Meaning used by the app |
+|---|---|
+| 0 | `has_response`: cached keyboard answer available |
+| 1 | battery level, 0–100 |
+| 5 | `rf_ready`: 0 = waiting for keyboard, nonzero = idle |
+
+The corrected receiver-local command meanings are **`FD` = GET_DONGLE_ID** (`AA 55 01 00`) and
+**`FE` = SET_RESPONSE_SIZE**, a one-shot SPI transmit-length override. They are not part of the app's transfer
+sequence. See the related firmware analysis in
+[monsgeek-akko-linux, transport and dongle-only commands](https://github.com/echtzeit-solutions/monsgeek-akko-linux/blob/master/docs/PROTOCOL.md).
+
+### 5.2 SET completion and interference
+
+SETs do **not** return a keyboard feature response. Send the packet directly, wait for `rf_ready`, and respect
+the busy/idle events **`0F 01` / `0F 00`** on the event collection (§6). Do not wait for `has_response` after a SET.
+`WriteImageVerified` rereads the image and retries differences; a successful USB write alone does not prove that
+the keyboard stored the change.
+
+SignalRGB controlling the keyboard generated roughly 25 busy/idle events per second during live testing and
+caused response loss. Disable the keyboard in SignalRGB or close the program before testing. `ForeignTraffic`
+detects repeated events without a recent write from this app and reports the conflict. Wake the keyboard by
+typing before a test. An unanswered GET raises `DeviceAsleepException` when no foreign traffic is detected;
+the UI retries connection every 3 seconds.
+
+### 5.3 Wireless safety limits
+
+* **Never select a profile (`0x04`) through this receiver.** A live attempt locked up the keyboard until it was
+  switched off and on. `CanSwitchProfiles` is false, and profile activation and calibration are disabled in the UI.
+* Read key matrices for all four profiles using the profile parameter; read/write HE only for the active profile.
+  `HeWasRead` distinguishes missing HE tables from actual all-zero data, so unread profiles must not be filled
+  with defaults and written back. A wireless original backup therefore omits HE for inactive profiles.
+* Before the first SET, query the physical active profile (`84`) and compare it with the image that was read.
+  If it changed, abort before writing and require a fresh read: HE writes implicitly address the active profile.
+* Never send reset (`01`), pairing (`F8`), bootloader (`7F`), flash erase (`AC`), upgrade (`BA`), or any
+  `F0`–`FF` command to the **keyboard**. `F7`/`FC` above are handled locally by the receiver. Experimental keyboard
+  commands must be GETs (`>=80` and `<F0`), excluding destructive commands such as `AC` and `BA`.
+  Factory reset is blocked by the app over both cable and receiver, and its UI control is disabled.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -302,7 +335,9 @@ Debounced 300 ms before dispatch.
 
 ## 7. BACKUP — how the original app reads the full state (do this before writing anything)
 
-Read order used by the app (`writeToAppState`, index.js 69843 / 68340-68460) plus what is needed for a full image:
+Read order used by the vendor app (`writeToAppState`, index.js 69843 / 68340-68460) plus what is needed for a full image.
+**Steps that select a profile apply to the USB cable only. Over 2.4 GHz, skip profile selection and read HE only
+for the already-active profile (§5).**
 1. `0x8F` id + fw, `0x80` rf fw → choose class (2370/2901), compute `k` and top-deadzone support.
 2. `0x84` active profile `P0` (remember it!).
 3. Global: `0x87` LED, `0x88` side LED (harmless), `0x89` KBOption, `0x91` sleep, `0x83` polling, `0x97` auto-OS,
@@ -318,15 +353,19 @@ Read order used by the app (`writeToAppState`, index.js 69843 / 68340-68460) plu
 8. Restore active profile: `0x04 P0`.
 Store raw 64-byte responses (plus decoded JSON) so a restore can replay them byte-exact with the SET counterparts
 (0x0A bulk, 0x10 bulk, 0x0B, 0x0C, 0x65 bulk per op, 0x07, 0x09, 0x11, 0x03, 0x17, 0x06, 0x04).
-Note: step 6's `0x04` writes are the only writes in a backup — they are reversible (profile select) and the vendor app does
-the same when you click a profile.
+Note: over USB, step 6's `0x04` writes are the only writes in a backup, and the original profile is restored in a
+`finally` block. A dongle backup sends no profile-selection commands and contains no HE data for inactive profiles.
+The app saves one `original.json` per device without replacing it; named configurations belong to `saved-profiles`
+and are grouped by model.
 
 ---------------------------------------------------------------------------------------------------
 
 ## 8. Safety notes
 * Never send 0x01 (factory reset), 0xAC (flash erase), 0x7F/0xF8 55 AA 55 AA (boot loader), 0xBA xx (upgrade).
-* Respect delays (≥10 ms between Set/Get, ≥100 ms after SETs). Writing while the device reports busy (0F 01 00) is what the
-  vendor avoids.
+* Never send keyboard commands in 0xF0–0xFF, and never select a profile over 2.4 GHz. The receiver-local status/cache
+  operations in §5 do not forward commands to the keyboard.
+* Respect wired delays (≥10 ms between Set/Get, ≥100 ms after SETs) and device busy/idle events. Over the dongle,
+  use §5's flow control and poll `has_response` without a sleep.
 * Bulk HE writes overwrite **all 128 slots** of an op — always start from a fresh read of that op.
 
 ---------------------------------------------------------------------------------------------------

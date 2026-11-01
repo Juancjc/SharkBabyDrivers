@@ -4,7 +4,7 @@ using SharkBabyDrivers.Core.Hid;
 namespace SharkBabyDrivers.Core.Devices.X11;
 
 /// <summary>The 2.4 GHz receiver is present but the mouse is not answering (asleep, off or out of range).</summary>
-public sealed class MouseAsleepException() : IOException("O mouse não respondeu. Mexa ou clique no mouse para acordá-lo e tente de novo.");
+public sealed class MouseAsleepException() : DeviceAsleepException("O mouse não respondeu. Mexa ou clique no mouse para acordá-lo e tente de novo.");
 
 [SupportedOSPlatform("windows")]
 public sealed class X11Driver : IDeviceDriver

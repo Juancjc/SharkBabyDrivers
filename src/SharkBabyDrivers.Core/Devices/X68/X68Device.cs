@@ -17,33 +17,14 @@ public sealed class X68Driver : IDeviceDriver
     public ISharkDevice Open(IReadOnlyList<HidDeviceInfo> collections)
     {
         var cfg = collections.First(c => c.UsagePage == ConfigUsagePage && c.Usage == ConfigUsage && c.FeatureReportLength > 0);
-        return cfg.ProductId == PidDongle ? new X68DongleDevice(cfg) : new X68Device(collections);
+        if (cfg.ProductId != PidDongle) return new X68Device(collections);
+        // Through the 2.4 GHz receiver: same protocol, relayed (and paced) by the receiver.
+        var key = $"x68-dongle-{cfg.VendorId:x4}{cfg.ProductId:x4}".ToLowerInvariant();
+        return new X68Device(new DongleX68Transport(collections), key, cfg.ProductId, LinkKind.Dongle) { TransferDelayMs = 0 };
     }
 }
 
-/// <summary>
-/// The keyboard seen through its 2.4 GHz receiver. The receiver multiplexes commands with its own
-/// framing that is only partly known, so configuration is offered over the USB cable only.
-/// </summary>
-public sealed class X68DongleDevice(HidDeviceInfo info) : ISharkDevice
-{
-    public string DeviceKey { get; } = $"x68-dongle-{info.VendorId:x4}{info.ProductId:x4}".ToLowerInvariant();
-    public string Model => "Attack Shark X68 PRO HE";
-    public DeviceKind Kind => DeviceKind.Keyboard;
-    public LinkKind Link => LinkKind.Dongle;
-    public ushort VendorId => info.VendorId;
-    public ushort ProductId => info.ProductId;
-
-    public Task<DeviceSnapshot> ReadSnapshotAsync(IProgress<string>? progress = null, CancellationToken ct = default) =>
-        Task.FromException<DeviceSnapshot>(new NotSupportedException("Conecte o teclado pelo cabo USB para ler e gravar as configurações."));
-
-    public Task RestoreSnapshotAsync(DeviceSnapshot snapshot, IProgress<string>? progress = null, CancellationToken ct = default) =>
-        Task.FromException(new NotSupportedException("Conecte o teclado pelo cabo USB para ler e gravar as configurações."));
-
-    public void Dispose() { }
-}
-
-/// <summary>X68 PRO HE over the USB cable (3151:502F).</summary>
+/// <summary>X68 PRO HE over the USB cable (3151:502F) or its 2.4 GHz receiver (3151:5026).</summary>
 [SupportedOSPlatform("windows")]
 public sealed class X68Device : ISharkDevice
 {
@@ -54,7 +35,7 @@ public sealed class X68Device : ISharkDevice
     public string DeviceKey { get; }
     public string Model => "Attack Shark X68 PRO HE";
     public DeviceKind Kind => DeviceKind.Keyboard;
-    public LinkKind Link => LinkKind.Wired;
+    public LinkKind Link { get; } = LinkKind.Wired;
     public ushort VendorId => X68Protocol.VendorId;
     public ushort ProductId { get; }
 
@@ -71,9 +52,10 @@ public sealed class X68Device : ISharkDevice
     }
 
     /// <summary>Device over any transport (the simulator for tests and the --demo mode).</summary>
-    public X68Device(IX68Transport transport, string deviceKey)
+    public X68Device(IX68Transport transport, string deviceKey, ushort productId = PidX68ProHeWired, LinkKind link = LinkKind.Wired)
     {
-        ProductId = PidX68ProHeWired;
+        ProductId = productId;
+        Link = link;
         DeviceKey = deviceKey;
         _io = transport;
         _io.Event += OnEvent;
@@ -97,8 +79,14 @@ public sealed class X68Device : ISharkDevice
         for (var i = 0; _deviceBusy && i < 50; i++) Thread.Sleep(20);
     }
 
+    /// <summary>SET packets sent so far (used to tell whether a verification pass still had to write).</summary>
+    private int _sets;
+
     private void Send(byte[] packet)
     {
+        if (packet[0] >= 0xF0 || Array.IndexOf(Forbidden, packet[0]) >= 0)
+            throw new InvalidOperationException($"Comando 0x{packet[0]:X2} bloqueado por segurança.");
+        if (packet[0] < 0x80) _sets++;
         WaitIdle();
         if (TransferDelayMs > 0) Thread.Sleep(TransferDelayMs);
         _io.Send(packet);
@@ -152,7 +140,9 @@ public sealed class X68Device : ISharkDevice
 
     // ------------------------------------------------------------------ reading (backup)
 
-    public X68Image ReadImage(IProgress<string>? progress = null, CancellationToken ct = default)
+    public X68Image ReadImage(IProgress<string>? progress = null, CancellationToken ct = default) => ReadImage(progress, ct, []);
+
+    private X68Image ReadImage(IProgress<string>? progress, CancellationToken ct, IEnumerable<int> extraMacros)
     {
         var img = new X68Image();
         progress?.Report("identificação");
@@ -198,6 +188,8 @@ public sealed class X68Device : ISharkDevice
                 progress?.Report($"perfil {profile + 1}: Hall Effect");
                 if (profile != current)
                 {
+                    // Over 2.4 GHz the profile is never switched (it can drop the link): HE of the active one only.
+                    if (!CanSwitchProfiles) continue;
                     SelectProfile(profile);
                     current = profile;
                 }
@@ -215,7 +207,7 @@ public sealed class X68Device : ISharkDevice
         }
 
         progress?.Report("macros");
-        foreach (var idx in img.ReferencedMacros())
+        foreach (var idx in img.ReferencedMacros().Concat(extraMacros).Distinct())
         {
             var buf = new List<byte>();
             for (var page = 0; page < 4; page++)
@@ -226,6 +218,8 @@ public sealed class X68Device : ISharkDevice
             }
             img.Macros[idx] = buf.Take(X68Macro.MaxBytes).ToArray();
         }
+        if (!CanSwitchProfiles && QueryEcho(GetProfile)[1] != original)
+            throw new IOException("O perfil ativo do teclado mudou durante a leitura. Leia o teclado novamente antes de aplicar alterações.");
         return img;
     }
 
@@ -306,7 +300,41 @@ public sealed class X68Device : ISharkDevice
     public void WriteDebounce(byte value) { Send(Command([SetDebounce, value])); VendorSleep(); }
     public void WriteAutoOs(bool on) { Send(Command([SetAutoOs, (byte)(on ? 1 : 0)])); VendorSleep(); }
 
-    public void SelectProfile(int profile) { Send(Command([SetProfile, (byte)profile])); VendorSleep(); }
+    /// <summary>
+    /// False over the 2.4 GHz receiver: a profile switch sent through it once left the keyboard busy and off the
+    /// link until it was power-cycled, so the active profile is only changed over the cable (or on the keyboard).
+    /// Hall-effect tables exist only for the active profile, so wirelessly only those can be read and written.
+    /// </summary>
+    public bool CanSwitchProfiles => Link != LinkKind.Dongle;
+
+    public void SelectProfile(int profile)
+    {
+        if (!CanSwitchProfiles)
+            throw new InvalidOperationException("Pelo receptor 2.4G o perfil ativo não é trocado (o teclado pode perder a conexão). Use o cabo USB-C.");
+        Send(Command([SetProfile, (byte)profile]));
+        VendorSleep();
+    }
+
+    /// <summary>
+    /// <see cref="WriteImage"/>, and over the 2.4 GHz receiver (where writes are not acknowledged) a read-back of
+    /// the keyboard followed by a rewrite of whatever did not stick, until nothing differs.
+    /// </summary>
+    public void WriteImageVerified(X68Image img, X68Image? before, IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        // A sleeping keyboard would silently drop the writes: make sure it answers first.
+        if (Link == LinkKind.Dongle) QueryEcho(GetUsbVersion);
+        WriteImage(img, before, progress);
+        if (Link != LinkKind.Dongle) return;
+        for (var pass = 0; pass < 3; pass++)
+        {
+            var check = new Progress<string>(s => progress?.Report($"conferindo: {s}"));
+            var now = ReadImage(check, ct, img.Macros.Keys);
+            var sets = _sets;
+            WriteImage(img, now, progress);
+            if (_sets == sets) return;
+        }
+        throw new IOException("Algumas alterações não foram confirmadas pelo teclado via 2.4G. Tente aplicar de novo (ou use o cabo).");
+    }
 
     /// <summary>Writes the Hall-effect tables of <paramref name="profile"/> that differ from <paramref name="before"/> (all when null).</summary>
     public void WriteHallEffect(X68Image img, int profile, X68Image? before)
@@ -358,8 +386,16 @@ public sealed class X68Device : ISharkDevice
     public void WriteImage(X68Image img, X68Image? before, IProgress<string>? progress = null)
     {
         static bool Diff(byte[] a, byte[]? b) => b is null || !a.AsSpan().SequenceEqual(b);
-        var targetActive = img.ActiveProfile;
+        // HE writes implicitly address the physical active profile. A cached/editor profile number cannot
+        // be trusted after an Fn switch on the keyboard (events may have been lost while the app was busy).
         var current = before?.ActiveProfile ?? -1;
+        if (!CanSwitchProfiles)
+        {
+            current = QueryEcho(GetProfile)[1];
+            if (current != (before?.ActiveProfile ?? img.ActiveProfile) || img.ActiveProfile != current)
+                throw new IOException("O perfil ativo do teclado mudou. Leia o teclado novamente antes de aplicar alterações; nada foi gravado.");
+        }
+        var targetActive = CanSwitchProfiles ? img.ActiveProfile : current;
         for (var profile = 0; profile < Profiles; profile++)
         {
             for (var son = 0; son < SonProfiles; son++)
@@ -372,7 +408,8 @@ public sealed class X68Device : ISharkDevice
                 && img.HallEffect[profile].ContainsKey(op) && Diff(img.He(profile, op), before.HallEffect[profile].GetValueOrDefault(op)));
             heChanged |= before is not null && img.HallEffect[profile].ContainsKey(HeOp.DksStages)
                 && Diff(img.He(profile, HeOp.DksStages), before.HallEffect[profile].GetValueOrDefault(HeOp.DksStages));
-            if (heChanged)
+            // Over 2.4 GHz only the active profile's Hall-effect tables can be written (no profile switch).
+            if (heChanged && (CanSwitchProfiles || (profile == current && HeWasRead(before ?? img, profile))))
             {
                 progress?.Report($"perfil {profile + 1}: Hall Effect");
                 if (current != profile) { SelectProfile(profile); current = profile; }
@@ -384,7 +421,7 @@ public sealed class X68Device : ISharkDevice
         if (Diff(img.FnWin, before?.FnWin)) { progress?.Report("Fn (Windows)"); WriteFn(0, img.FnWin); }
         if (Diff(img.FnMac, before?.FnMac)) { progress?.Report("Fn (Mac)"); WriteFn(1, img.FnMac); }
         foreach (var (idx, data) in img.Macros)
-            if (before is null || !before.Macros.TryGetValue(idx, out var old) || Diff(data, old)) { progress?.Report($"macro {idx + 1}"); WriteMacro(idx, data); }
+            if (before is null || !before.Macros.TryGetValue(idx, out var old) || MacroDiffers(data, old)) { progress?.Report($"macro {idx + 1}"); WriteMacro(idx, data); }
         for (var i = 0; i < img.UserPics.Length; i++)
             if (Diff(img.UserPics[i], before?.UserPics[i])) { progress?.Report($"imagem LED {i + 1}"); WriteUserPic(i, img.UserPics[i]); }
         if (Diff(img.Led.AsSpan(1, 7).ToArray(), before?.Led.AsSpan(1, 7).ToArray())) { progress?.Report("iluminação"); WriteLed(img.Led); }
@@ -394,6 +431,18 @@ public sealed class X68Device : ISharkDevice
         if (before is null || img.Debounce[1] != before.Debounce[1]) WriteDebounce(img.Debounce[1]);
         if (before is null || img.AutoOs[1] != before.AutoOs[1]) WriteAutoOs(img.AutoOsDetect);
     }
+
+    private static bool MacroDiffers(byte[] desired, byte[] actual)
+    {
+        // GET returns complete 64-byte pages; the editor encodes only the events. Their zero padding
+        // does not change the macro, and must not cause an endless write/read-back verification loop.
+        for (var i = 0; i < Math.Max(desired.Length, actual.Length); i++)
+            if ((i < desired.Length ? desired[i] : 0) != (i < actual.Length ? actual[i] : 0)) return true;
+        return false;
+    }
+
+    /// <summary>Whether the Hall-effect tables of <paramref name="profile"/> came from the keyboard (not defaults).</summary>
+    public static bool HeWasRead(X68Image img, int profile) => img.HallEffect[profile].ContainsKey(HeOp.Actuation);
 
     /// <summary>Min/zero calibration then max calibration, as the official "calibrate" button does.</summary>
     public void StartCalibration()
@@ -433,7 +482,7 @@ public sealed class X68Device : ISharkDevice
         RunAsync(() => ReadImage(progress, ct).ToSnapshot(DeviceKey, Model), ct);
 
     public Task RestoreSnapshotAsync(DeviceSnapshot snapshot, IProgress<string>? progress = null, CancellationToken ct = default) =>
-        RunAsync(() => WriteImage(X68Image.FromSnapshot(snapshot), null, progress), ct);
+        RunAsync(() => WriteImageVerified(X68Image.FromSnapshot(snapshot), null, progress, ct), ct);
 
     public void Dispose()
     {

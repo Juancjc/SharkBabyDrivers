@@ -4,8 +4,9 @@ internal static partial class Strings
 {
     private static Dictionary<string, string> KeyboardPt => new()
     {
-        ["kb_dongle_title"] = "Teclado conectado pelo receptor 2.4G",
-        ["kb_dongle_text"] = "Pelo receptor 2.4G o SharkBabyDrivers ainda não lê nem grava as configurações do X68 PRO HE (o protocolo do receptor não está confirmado e não vamos arriscar o seu teclado). Ligue o cabo USB-C no teclado e ele aparece aqui pronto para configurar — o que for gravado fica salvo no teclado e continua valendo no modo sem fio.",
+        ["unsupported_device_title"] = "Dispositivo sem suporte de configuração",
+        ["unsupported_device_text"] = "Este dispositivo foi detectado, mas ainda não pode ser configurado pelo aplicativo.",
+        ["kb_he_wireless_locked"] = "Pelo receptor 2.4G o Hall Effect só pode ser lido e gravado no perfil em uso (trocar de perfil sem fio pode derrubar a conexão). Para editar este perfil, ative-o no teclado ou use o cabo USB-C.",
         ["kb_profile"] = "Perfil",
         ["kb_active_profile"] = "Perfil em uso no teclado: {0}",
         ["kb_activate_profile"] = "Usar este perfil no teclado",
@@ -116,8 +117,9 @@ internal static partial class Strings
 
     private static Dictionary<string, string> KeyboardEn => new()
     {
-        ["kb_dongle_title"] = "Keyboard connected through the 2.4G receiver",
-        ["kb_dongle_text"] = "Through the 2.4G receiver SharkBabyDrivers does not read or write the X68 PRO HE settings yet (the receiver protocol is not confirmed and we will not gamble with your keyboard). Plug the USB-C cable into the keyboard and it shows up here ready to configure — whatever is written is stored in the keyboard and keeps working wirelessly.",
+        ["unsupported_device_title"] = "Device configuration is not supported",
+        ["unsupported_device_text"] = "This device was detected, but the app cannot configure it yet.",
+        ["kb_he_wireless_locked"] = "Through the 2.4G receiver Hall Effect can only be read and written on the profile in use (switching profiles wirelessly can drop the connection). To edit this profile, activate it on the keyboard or use the USB-C cable.",
         ["kb_profile"] = "Profile",
         ["kb_active_profile"] = "Profile in use on the keyboard: {0}",
         ["kb_activate_profile"] = "Use this profile on the keyboard",

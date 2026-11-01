@@ -6,8 +6,9 @@ namespace SharkBabyDrivers.Core.Storage;
 public sealed record BackupEntry(string Path, DeviceSnapshot Snapshot, bool IsOriginal);
 
 /// <summary>
-/// Backups of what is stored inside each device. The very first backup of a device is kept
-/// forever as "original" (the configuration it had before SharkBabyDrivers ever wrote to it).
+/// The backup of what each device had stored before SharkBabyDrivers ever wrote to it ("original").
+/// It is taken once, on the first connection, and never replaced or deleted. Configurations the user
+/// wants to keep go to the <see cref="ProfileLibrary"/> instead.
 /// </summary>
 public sealed class BackupStore
 {
@@ -16,33 +17,26 @@ public sealed class BackupStore
 
     public string Folder(string deviceKey) => Path.Combine(AppPaths.Backups, AppPaths.SafeName(deviceKey));
 
-    public bool HasOriginal(string deviceKey) => File.Exists(Path.Combine(Folder(deviceKey), OriginalName));
+    private string OriginalPath(string deviceKey) => Path.Combine(Folder(deviceKey), OriginalName);
 
-    /// <summary>Saves a snapshot. The first one for a device becomes the permanent original.</summary>
-    public BackupEntry Save(DeviceSnapshot snapshot)
+    public bool HasOriginal(string deviceKey) => File.Exists(OriginalPath(deviceKey));
+
+    /// <summary>Saves the snapshot as the device's original, unless it already has one. Returns the entry when it was written.</summary>
+    public BackupEntry? SaveOriginal(DeviceSnapshot snapshot)
     {
-        var folder = Folder(snapshot.DeviceKey);
-        Directory.CreateDirectory(folder);
-        var isOriginal = !HasOriginal(snapshot.DeviceKey);
-        var name = isOriginal ? OriginalName : $"{snapshot.CreatedAt:yyyyMMdd-HHmmss}.json";
-        var path = Path.Combine(folder, name);
+        if (HasOriginal(snapshot.DeviceKey)) return null;
+        var path = OriginalPath(snapshot.DeviceKey);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var tmp = path + ".tmp";
         File.WriteAllText(tmp, JsonSerializer.Serialize(snapshot, Json));
-        File.Move(tmp, path, overwrite: true);
-        return new BackupEntry(path, snapshot, isOriginal);
+        File.Move(tmp, path, overwrite: false);
+        return new BackupEntry(path, snapshot, true);
     }
 
-    public IReadOnlyList<BackupEntry> List(string deviceKey)
+    public BackupEntry? Original(string deviceKey)
     {
-        var folder = Folder(deviceKey);
-        if (!Directory.Exists(folder)) return [];
-        return Directory.GetFiles(folder, "*.json")
-            .Select(p => TryLoad(p) is { } s ? new BackupEntry(p, s, Path.GetFileName(p) == OriginalName) : null)
-            .Where(e => e is not null)
-            .Select(e => e!)
-            .OrderByDescending(e => e.IsOriginal)
-            .ThenByDescending(e => e.Snapshot.CreatedAt)
-            .ToList();
+        var path = OriginalPath(deviceKey);
+        return File.Exists(path) && TryLoad(path) is { } s ? new BackupEntry(path, s, true) : null;
     }
 
     public static DeviceSnapshot? TryLoad(string path)

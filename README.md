@@ -16,8 +16,10 @@ Um app só, leve e em português (ou inglês), para configurar o **mouse Attack 
 
 - Barra lateral com cada periférico conectado (detecta ligar/desligar na hora).
 - **Backup antes de tudo:** ao conectar, o app lê o que está salvo *dentro* do dispositivo e guarda um
-  backup. O primeiro fica marcado como **ORIGINAL** e nunca é apagado. Nada é gravado antes disso.
-  Restaurar, exportar e importar backups pela aba *Backup*.
+  único backup **ORIGINAL** por dispositivo, sem substituí-lo nas conexões seguintes. Nada é aplicado antes disso.
+  Pelo receptor 2.4G, o backup do teclado inclui Hall Effect somente do perfil ativo.
+- Na aba **Salvos e backup**, salve configurações com nome, carregue, importe e exporte perfis, ou restaure e
+  exporte o backup original. Os perfis salvos ficam agrupados por modelo e podem ser usados pelo cabo ou receptor.
 - Grava só o que mudou, ao clicar em **Aplicar no dispositivo** (com *Descartar alterações*).
 
 ## O que dá para configurar
@@ -29,18 +31,25 @@ Um app só, leve e em português (ou inglês), para configurar o **mouse Attack 
 - Iluminação (7 efeitos, cor, brilho, velocidade), sono e sono profundo
 - Macros gravadas pelo teclado, com repetição; bateria em tempo real; reset de fábrica
 
-**Teclado X68 PRO HE** (pelo cabo USB)
+**Teclado X68 PRO HE** (cabo USB ou receptor 2.4G, com as limitações abaixo)
 - 4 perfis da memória do teclado; camadas Normal, Fn Windows e Fn Mac
 - Remapeamento de qualquer tecla: tecla/combinação, mouse, mídia, energia, macro, troca de perfil
 - Hall Effect por tecla ou em grupo: acionamento, soltura, Rapid Trigger (sensibilidades), zonas mortas
   superior/inferior, tipo de switch, DKS, Mod-Tap, Toggle, Snap Tap/SOCD, calibração
 - Iluminação (19 efeitos com variações, cor/arco-íris, brilho, velocidade)
 - Polling até 8000 Hz, debounce, detecção de SO, anti-toque acidental, estabilidade do RT, troca WASD↔setas,
-  timers de sono; macros; reset de fábrica
+  timers de sono; macros. O reset de fábrica do teclado fica desativado por segurança, inclusive pelo cabo.
 
-> **Teclado pelo receptor 2.4G:** aparece na barra lateral, mas a configuração é feita **pelo cabo USB-C**.
-> O protocolo do receptor não está confirmado e o app não arrisca o teclado. O que for gravado pelo cabo
-> fica salvo no teclado e vale também no modo sem fio.
+> **Teclado pelo receptor 2.4G (`3151:5026`):** permite ler e aplicar configurações, incluindo iluminação e
+> Hall Effect do **perfil ativo**. A troca de perfil e a calibração ficam desativadas sem fio; use o cabo para
+> essas operações e para ler o Hall Effect dos quatro perfis. As matrizes de teclas dos quatro perfis podem ser
+> lidas sem trocar o perfil ativo. Após aplicar pelo receptor, o app relê os dados e tenta novamente o que não
+> foi confirmado. Antes de gravar, também confere o perfil ativo no teclado e interrompe a aplicação se ele
+> mudou desde a leitura. A leitura é mais lenta que pelo cabo.
+>
+> Aperte uma tecla antes de conectar para acordar o teclado; enquanto ele dorme, o app tenta novamente a cada
+> 3 segundos. **Desative o controle do teclado no SignalRGB ou feche-o**: o tráfego contínuo de iluminação pode
+> fazer as respostas se perderem. O app avisa quando detecta esse tráfego.
 
 ## Baixar
 
@@ -80,7 +89,8 @@ Não precisa de administrador nem de driver: tudo é feito por HID padrão do Wi
 ## Onde ficam os dados
 
 `%LOCALAPPDATA%\SharkBabyDrivers\`
-- `backups\<dispositivo>\original.json` e backups com data
+- `backups\<dispositivo>\original.json` — único backup original por dispositivo
+- `saved-profiles\<modelo>\*.sbd.json` — configurações salvas com nome na aba *Salvos e backup*
 - `profiles\` — botões e macros do X11 (o mouse não deixa ler isso de volta)
 - `settings.json`, `sharkbabydrivers.log`
 
