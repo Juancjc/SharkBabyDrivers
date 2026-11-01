@@ -1,0 +1,9 @@
+Generated with the built-in image_gen tool, transparent background enabled.
+
+Use case: logo-brand.
+Asset type: production mascot logo for SharkBabyDrivers, a premium dark desktop peripheral configuration app.
+Primary request: create a polished, original baby shark mascot with a pacifier in its mouth. A clearly recognizable shark, rounded confident head in a slight three-quarter view, small dorsal fin, small side fin integrated in the silhouette, one expressive determined-but-friendly eye, restrained cute proportions. The pacifier is large and unmistakable: cherry-red shield and red ring, centered in the mouth.
+Style: immaculate bold vector-like logo artwork with clean geometry, thick controlled charcoal outline, a few broad flat color planes, subtle minimal highlight only. Modern friendly gaming identity, elegant and witty rather than a children's cartoon.
+Palette: ice-silver/light cool grey shark, charcoal outline #17151B, deep cherry red #F13C53 and pale red accent. The shark must read clearly on a dark charcoal app background and at small icon sizes.
+Composition: one single centered mascot, compact roughly circular silhouette, fills about 83% of the square canvas with comfortable margins, the head facing slightly right. No badge, no enclosing circle, no text, no letters, no slogan, no watermark. Genuinely transparent background, preserve clean alpha edges.
+Avoid: photorealism, 3D render, texture, dramatic shadows, glow, blue ocean, ocean scene, extra objects, angry teeth, threatening shark, intricate tiny details, multiple mascots, checkerboard drawn into artwork.

@@ -142,6 +142,7 @@ public sealed class X68Vm : DeviceVm
         get => _lighting.SignalRgbOwns;
         set
         {
+            if (App.IsPreview) return;
             if (value == _lighting.SignalRgbOwns) return;
             if (value && SignalRgbPluginState != Services.PluginState.Installed && App.Confirm(Loc.T("signal_plugin_offer")))
                 InstallSignalRgbPlugin();
@@ -164,6 +165,7 @@ public sealed class X68Vm : DeviceVm
 
     private void InstallSignalRgbPlugin()
     {
+        if (App.IsPreview) return;
         Services.SignalRgbPlugin.Install();
         OnLightingChanged();
         ShowToast(Loc.T("signal_plugin_installed"));
@@ -198,7 +200,7 @@ public sealed class X68Vm : DeviceVm
         _lighting.LedChanged += OnLightingLed;
         _lightingTimer.Tick += (_, _) => OnLightingChanged();
         _lightingTimer.Start();
-        InstallSignalRgbPluginCommand = new RelayCommand(InstallSignalRgbPlugin);
+        InstallSignalRgbPluginCommand = new RelayCommand(InstallSignalRgbPlugin, () => !App.IsPreview);
         _kb.VendorEvent += e => Ui.Post(() => OnVendorEvent(e));
         SelectKeyCommand = new RelayCommand(p => SelectKey((KeyCapVm)p!));
         SelectAllCommand = new RelayCommand(() => { foreach (var c in Caps) c.IsSelected = true; OnSelectionChanged(); });

@@ -20,14 +20,17 @@ public partial class App : Application
     public static bool ExitRequested { get; private set; }
     /// <summary>Started by Windows at sign-in (or with --tray): stay in the tray, light, until the window is opened.</summary>
     public static bool StartedInTray { get; } = Environment.GetCommandLineArgs().Contains("--tray", StringComparer.OrdinalIgnoreCase);
+    /// <summary>Isolated UI preview: separate settings and instance, with simulated devices only.</summary>
+    public static bool IsPreview { get; } = Environment.GetCommandLineArgs().Contains("--preview", StringComparer.OrdinalIgnoreCase);
 
     private EventWaitHandle? _showSignal;
     private Services.TrayIcon? _tray;
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        if (IsPreview) AppPaths.Root = Path.Combine(AppContext.BaseDirectory, "preview-data");
         using var identity = WindowsIdentity.GetCurrent();
-        var sid = identity.User?.Value ?? Environment.UserName;
+        var sid = (identity.User?.Value ?? Environment.UserName) + (IsPreview ? "-preview" : "");
         _instanceMutex = new Mutex(true, @"Local\SharkBabyDrivers-" + sid, out var firstInstance);
         if (!firstInstance)
         {
@@ -42,7 +45,7 @@ public partial class App : Application
                 return;
             }
         }
-        if (!firstInstance || HasLegacyInstance())
+        if (!firstInstance || (!IsPreview && HasLegacyInstance()))
         {
             ReleaseInstanceMutex();
             var english = AppSettings.Load().Language == "en";
@@ -60,6 +63,7 @@ public partial class App : Application
         base.OnStartup(e);
 
         var window = new MainWindow();
+        if (IsPreview) window.Title += " · " + Loc.T("tray_preview");
         MainWindow = window;
         _tray = new Services.TrayIcon(window, window.Vm);
         _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\SharkBabyDrivers-show-" + sid);
@@ -75,6 +79,11 @@ public partial class App : Application
 
     public static void ShowMainWindow()
     {
+        if (Current.MainWindow is MainWindow main)
+        {
+            main.RestoreFromTray();
+            return;
+        }
         if (Current.MainWindow is not Window w) return;
         w.Show();
         if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;

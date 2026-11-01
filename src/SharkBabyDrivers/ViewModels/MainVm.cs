@@ -45,6 +45,12 @@ public sealed class MainVm : ObservableObject, IDisposable
             Directory.CreateDirectory(AppPaths.Backups);
             Process.Start(new ProcessStartInfo("explorer.exe", AppPaths.Backups) { UseShellExecute = true });
         });
+        if (App.IsPreview)
+        {
+            var sim = new X68Simulator(X68Simulator.FactoryImage(2901, 0x0505));
+            OnConnected(new X68Device(sim, "x68-demo-preview") { TransferDelayMs = 0, WriteSettleMs = 0 });
+            return;
+        }
         _debounce.Tick += (_, _) => { _debounce.Stop(); Refresh(); };
         _poll.Tick += (_, _) => Refresh();
         _poll.Start();
@@ -90,12 +96,14 @@ public sealed class MainVm : ObservableObject, IDisposable
     /// <summary>Called on WM_DEVICECHANGE; bursts of notifications collapse into one rescan.</summary>
     public void RequestRefresh()
     {
+        if (App.IsPreview) return;
         _debounce.Stop();
         _debounce.Start();
     }
 
     private async void Refresh()
     {
+        if (App.IsPreview) return;
         if (_refreshing) return;
         // Discovery only reads HID attributes. A sleeping receiver retry must not hide a newly
         // connected cable; DeviceManager keeps already-open collections instead of reopening them.

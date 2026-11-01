@@ -19,6 +19,7 @@ public static class Autostart
         }
         set
         {
+            if (App.IsPreview) return;
             using var key = Registry.CurrentUser.CreateSubKey(RunKey);
             if (value) key.SetValue(ValueName, Command);
             else key.DeleteValue(ValueName, throwOnMissingValue: false);
@@ -28,6 +29,7 @@ public static class Autostart
     /// <summary>Points an existing entry at this copy of the app (it may have moved or been updated).</summary>
     public static void Refresh()
     {
+        if (App.IsPreview) return;
         using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
         if (key?.GetValue(ValueName) is string v && v != Command) key.SetValue(ValueName, Command);
     }

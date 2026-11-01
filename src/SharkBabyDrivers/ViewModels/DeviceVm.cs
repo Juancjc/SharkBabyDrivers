@@ -69,6 +69,8 @@ public abstract class DeviceVm : ObservableObject, IDisposable
     }
 
     public string Title => Device.DeviceKey.Contains("demo", StringComparison.Ordinal) ? $"{Device.Model} (demo)" : Device.Model;
+    public string NavigationTitle => Title.StartsWith("Attack Shark ", StringComparison.Ordinal)
+        ? Title["Attack Shark ".Length..] : Title;
     public string KindText => Loc.T(Device.Kind == DeviceKind.Mouse ? "kind_mouse" : "kind_keyboard");
     public string LinkText => Loc.T(Device.Link switch { LinkKind.Wired => "link_wired", LinkKind.Dongle => "link_dongle", _ => "link_bluetooth" });
     /// <summary>Segoe Fluent glyph: mouse or keyboard.</summary>

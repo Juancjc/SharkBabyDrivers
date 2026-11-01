@@ -31,7 +31,7 @@ public sealed class LightingCoordinator : IDisposable
     public LightingCoordinator(AppSettings settings)
     {
         _settings = settings;
-        _bridge.Start();
+        if (!App.IsPreview) _bridge.Start();
     }
 
     /// <summary>Raised (on the UI thread) when the keyboard's lighting bytes were changed by the coordinator.</summary>

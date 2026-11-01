@@ -4,8 +4,8 @@ internal static partial class Strings
 {
     public static readonly Dictionary<string, Dictionary<string, string>> Table = new()
     {
-        ["pt-BR"] = Merge(CommonPt, MousePt, KeyboardPt),
-        ["en"] = Merge(CommonEn, MouseEn, KeyboardEn),
+        ["pt-BR"] = Merge(CommonPt, MousePt, KeyboardPt, ShellPt),
+        ["en"] = Merge(CommonEn, MouseEn, KeyboardEn, ShellEn),
     };
 
     private static Dictionary<string, string> Merge(params Dictionary<string, string>[] parts)
@@ -18,6 +18,10 @@ internal static partial class Strings
     private static Dictionary<string, string> CommonPt => new()
     {
         ["app_tagline"] = "Mouse e teclado num lugar só",
+        ["tray_minimize"] = "Minimizar para a bandeja",
+        ["tray_preview"] = "Prévia",
+        ["tray_section_lighting"] = "CONTROLE DA ILUMINAÇÃO",
+        ["tray_section_app"] = "APLICATIVO",
         ["devices"] = "Dispositivos",
         ["no_devices_title"] = "Nenhum periférico conectado",
         ["no_devices_text"] = "Conecte o mouse ou o teclado (cabo ou receptor 2.4G). Eles aparecem aqui sozinhos.",
@@ -103,6 +107,10 @@ internal static partial class Strings
     private static Dictionary<string, string> CommonEn => new()
     {
         ["app_tagline"] = "Mouse and keyboard in one place",
+        ["tray_minimize"] = "Minimize to tray",
+        ["tray_preview"] = "Preview",
+        ["tray_section_lighting"] = "LIGHTING CONTROL",
+        ["tray_section_app"] = "APPLICATION",
         ["devices"] = "Devices",
         ["no_devices_title"] = "No peripheral connected",
         ["no_devices_text"] = "Plug in the mouse or the keyboard (cable or 2.4G receiver). They show up here automatically.",
