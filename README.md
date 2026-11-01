@@ -1,3 +1,14 @@
+<p align="center">
+  <img src="assets/banner.png" alt="SharkBabyDrivers — mouse e teclado Attack Shark num app só" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/Juancjc/SharkBabyDrivers/releases/latest"><img src="https://img.shields.io/github/v/release/Juancjc/SharkBabyDrivers?color=e8323c&label=vers%C3%A3o" alt="versão"></a>
+  <a href="https://github.com/Juancjc/SharkBabyDrivers/actions/workflows/ci.yml"><img src="https://github.com/Juancjc/SharkBabyDrivers/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-e8323c" alt="Windows 10 | 11">
+  <img src="https://img.shields.io/badge/.NET-8-e8323c" alt=".NET 8">
+</p>
+
 # SharkBabyDrivers
 
 Um app só, leve e em português (ou inglês), para configurar o **mouse Attack Shark X11** e o

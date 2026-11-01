@@ -5,6 +5,7 @@
         xmlns:vm="clr-namespace:SharkBabyDrivers.ViewModels"
         xmlns:v="clr-namespace:SharkBabyDrivers.Views"
         Title="SharkBabyDrivers" Width="1280" Height="820" MinWidth="980" MinHeight="640"
+        Icon="pack://application:,,,/Assets/icon.ico"
         Background="{StaticResource Bg}" FontFamily="{StaticResource UiFont}"
         TextOptions.TextFormattingMode="Display" UseLayoutRounding="True"
         WindowStartupLocation="CenterScreen">
@@ -125,15 +126,8 @@
         <Border Background="{StaticResource Sidebar}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0">
             <DockPanel Margin="16,20,16,16">
                 <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6,0,0,26">
-                    <Border Width="38" Height="38" CornerRadius="11" Margin="0,0,12,0">
-                        <Border.Background>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                <GradientStop Color="#FF4D56" Offset="0"/>
-                                <GradientStop Color="#9E1520" Offset="1"/>
-                            </LinearGradientBrush>
-                        </Border.Background>
-                        <TextBlock Text="🦈" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe UI Emoji"/>
-                    </Border>
+                    <Image Source="pack://application:,,,/Assets/logo.png" Width="40" Height="40" Margin="0,0,12,0"
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="SharkBabyDrivers" FontSize="16" FontWeight="SemiBold"/>
                         <TextBlock Text="{l:T app_tagline}" Foreground="{StaticResource Muted}" FontSize="11.5"/>
