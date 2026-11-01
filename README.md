@@ -75,10 +75,23 @@ dois modos. Com o SharkBabyDrivers no controle, o próprio teclado apaga; com o 
 desse tempo sem tecla **neste** teclado e para de enviar (o rádio fica quieto); a primeira tecla traz as cores de
 volta. O app só percebe *quando* uma tecla do X68 é apertada (Raw Input do Windows), nunca *qual*. `0` = nunca.
 
-**Uma cor por vez:** com o SignalRGB, o teclado inteiro mostra uma cor só. O firmware original só aceita cor ao vivo
-para o teclado todo (`0x0E`); cor por tecla existe apenas como "imagem de LED" gravada na memória — mandar isso a
-cada quadro traria de volta as piscadas e o desgaste. Efeitos de duas cores (onda sobre um fundo) aparecem como a
-cor do ponto em que o teclado está no layout do SignalRGB, trocando conforme a onda passa.
+**Uma cor por vez ao vivo:** com o SignalRGB, o teclado inteiro mostra uma cor só. O firmware original não tem comando
+de cor por tecla em tempo real (o app oficial também não); cor por tecla existe apenas como "imagem de LED" gravada na
+memória — mandar isso a cada quadro traria de volta as piscadas e o desgaste. No plugin, *Live Color* escolhe como
+reduzir o efeito a uma cor: **destaque** (padrão — mostra o que foge do fundo, como a onda de um efeito de onda),
+centro do teclado, média das teclas ou cor dominante.
+
+**Por que não dá onda tecla por tecla ao vivo:** o firmware original do X68 não tem comando para isso — o app oficial
+também não faz. O comando de "animação por tecla" que existe no código oficial é de outra família de teclados e é
+ignorado pelo firmware desta plataforma (conferido desmontando um firmware RY5088), e a memória de imagens só comporta
+as 5 imagens fixas. Cor por tecla ao vivo exigiria trocar o firmware, o que este app não faz. Alternativas possíveis:
+o efeito *Onda* do próprio teclado (onda real, cores do teclado), barras por coluna no modo música (ao vivo, uma cor,
+sem fundo — ainda não implementado) e a imagem fixa abaixo. Detalhes em [`docs/SIGNALRGB.md`](docs/SIGNALRGB.md).
+
+**Imagem fixa do SignalRGB (várias cores):** em *Iluminação → Imagem fixa do SignalRGB*, o app grava **uma vez**, numa
+das 5 imagens do teclado, a cor que o SignalRGB está desenhando em cada tecla naquele momento, e liga o efeito
+"Imagem". Fica parada (não anima), vale no cabo e no receptor, e a sincronização ao vivo é desligada até você escolher
+SignalRGB de novo. O plugin 1.1 (com o mapa das teclas) precisa estar instalado e o SignalRGB reiniciado.
 
 **Por que piscava:** o plugin padrão do SignalRGB envia o comando de iluminação `0x07` (modo, brilho e cor) a cada
 quadro. O teclado grava esse comando na memória e reinicia o efeito a cada vez — ~30 gravações por segundo. O

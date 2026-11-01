@@ -57,6 +57,60 @@ SignalRGB effect ─► plugin (integrations/signalrgb) ─UDP 127.0.0.1:47851�
 * Over the receiver, ~15–20 colours/s reach the keyboard (each relayed write waits for the RF link);
   over the cable, ~30/s. While the keyboard sleeps the colours are lost until it wakes.
 
+## Per-key colour: what the stock firmware can and cannot do (diagnosed 2026-11-01)
+
+Question: can SignalRGB effects with several colours at once (background X + wave Y) be shown key by key, live?
+**Not on the stock firmware (id 2901, fw 0x0505).** Evidence, all without sending anything to the keyboard:
+
+| Kind | Command | Stored? | Live? | Evidence |
+|---|---|---|---|---|
+| 1. Global colour, live | mode 21 + `0x0E` R,G,B | no | **yes** (one colour, whole keyboard) | measured: no busy events, no flicker |
+| 2. Static multi-colour picture | `0x0C` SET_USERPIC (5 slots, 7 pages × 56 B, matrix order) + mode 13 | **flash** | no | official app `_setLightPic` + `vendorSleep`; RY5088 flash map has "User Pictures / LEDs" at 0x0802F800 |
+| 3. Per-key animation upload | `0x12` SET_USERGIF (start, then frames with `frameNum`/`frameDelay`) | **flash** (300 ms erase wait after start) | no — the firmware plays the uploaded loop | official app `setUserGifStart`/`setUserGif`; not offered for the X68 (mode 25 absent from its light layout) — never sent |
+| Per-key live streaming | — | — | **does not exist** | official `iot_driver` streams only `Music2` (`0x0D` band levels) and `Screen` (`0x0E`); the monsgeek project, which disassembled RY5088 firmware, had to **add** `0xE8 LED_STREAM` in a patched firmware, and its tools refuse stock firmware |
+
+So the single zone in the chain (plugin `Size [1,1]` → `RgbFrame` with one RGB → `ScreenColorPump` → `0x0E`) is not
+what limits the effect: there is no command that would apply more colours live. Sending more zones would have
+nowhere to go; emulating a stream with `0x0C`/`0x12` would rewrite flash on every frame (flicker and wear), and
+alternating one colour quickly would be a fake. Flashing a patched firmware is out of scope (no firmware updates).
+
+What *is* possible, and implemented: a **static** multi-colour picture (kind 2) captured once from SignalRGB's
+layout and written on request to a user-picture slot — not an animation.
+
+### Can the keyboard be made to "recognise" per-key animation? (researched 2026-11-01)
+
+* **`0x12` SET_USERGIF is ignored by RY5088 firmware.** Disassembly of `vendor_command_dispatch` (0x08013328) in the
+  monsgeek project's RY5088 firmware 2949 v408 (same platform/SDK as the X68): commands above 0x0D branch on 0x0E,
+  0x10, 0x11, 0x1B, 0x1C, 0x1E and 0x40–0x44; **0x12 falls through to the exit (0x08013AC4) without doing anything**.
+  The official app's GIF upload belongs to another keyboard family (its variant uses command ids 24/25), and the X68's
+  light layout has no "user colour" effect (25). It was never sent to the keyboard.
+* The flash area for LED pictures is 2048 B (`userpics` 0x0802F800–0x0802FFFF: room for the 5 pictures only), right
+  before `calib_data` (0x08032000) — there is no space for stored animation frames.
+* The only other live command is **`0x0D` SET_AUDIO_VIZ** (music modes 20/22, offered for the X68 by the official app):
+  16 band levels, rendered as **column bars** (pairs of bands per column, ~6 rows high), with the firmware's rainbow or
+  one solid colour — live per-column brightness, but not SignalRGB's per-key colours. Not implemented.
+* Real per-key streaming needs new firmware (the monsgeek patch adds `0xE8` for the M1 V5 only). No X68 firmware image
+  is available and flashing firmware is out of scope.
+
+### Static picture from SignalRGB (implemented 2026-11-01)
+
+* The plugin (1.1) declares the 80 keys of the X68 V2 at their physical positions (16 × 6 grid, table generated from
+  the app's layout by `SharkBabyDrivers.Cli signalrgb-layout` and checked by a test). Live it still reduces them to one
+  colour (*Live Color*: Accent — default: the average of the keys that differ from the dominant background, i.e. the wave
+  of a wave effect —, Center, Average or Dominant), because that is all the firmware can show.
+* Twice a second it also sends every key's colour (UDP type 3: count × [slot, R, G, B]).
+* *Lighting → Static picture from SignalRGB → Capture* (with a confirmation) writes that snapshot **once** with
+  `0x0C` into picture 1–5 (7 packets), reads it back with `0x8C` and rewrites if a packet was lost (receiver), then
+  sets effect 13 with that slot (`[4] = slot << 4`, as the official app). The lighting goes back to the app (live sync
+  off) without restoring the old effect; choosing SignalRGB again resumes the live sync.
+* Validated on the receiver with a "green wave over yellow" effect: 78 keys, 47 colours captured; read back from the
+  keyboard: F1–F8 / Esc–9 / Tab–I / Caps–K / Shift–, / Ctrl Win Alt Space green, the rest `FFDC00` yellow; effect
+  `0D 04 04 00` (picture 1); the camera shows the bare switches green and the capped keys yellow (orange under red
+  caps) at the same time. Over the cable the same commands are used (the official app sends them over USB); the
+  stored picture is shown on any link since it lives in the keyboard.
+* The saved "lighting before SignalRGB" is now validated (`X68Lighting.IsPlausibleEffect`): a garbled 0x87 answer
+  (seen as `87 04 BF 04 FB FF FF FF`) is never stored nor written back; a steady light is used instead.
+
 ## Idle light-off (receiver)
 
 While colours keep arriving the keyboard's own "light off after" timer (`0x11`, 2.4G idle at bytes 10–11) never

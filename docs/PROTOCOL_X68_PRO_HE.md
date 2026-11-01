@@ -134,13 +134,15 @@ offset: 0    1..6          7         8..63
 | 0x8A | GET_KEYMATRIX | R | `[1]=profile [2]=0xFF [3]=page 0..7 [4]=sonProfile 0..3` | 64 raw bytes/page → 512 B = 128 keys × 4 B |
 | 0x0B | SET_MACRO | W | `[1]=macroIdx [2]=page [3]=56 [4]=isLast` + 56 B | – |
 | 0x8B | GET_MACRO | R | `[1]=macroIdx [2]=page 0..3` | raw; stop after a page containing `00 00 00 00` |
-| 0x0C | SET_USERPIC (per-key RGB) | W | `[1]=slot 0..4 [2]=0xFF [3]=page 0..6 [4]=len(56, last=42) [5]=isLast` + RGB | – |
+| 0x0C | SET_USERPIC (per-key RGB) | W | `[1]=slot 0..4 [2]=0xFF [3]=page 0..6 [4]=len(56, last=42) [5]=isLast` + RGB — **stored in flash** (static picture, shown by effect 13 with `[4]=slot<<4`); confirmed live on id 2901 (cable path = official app, receiver tested) | – |
+| 0x0D | SET_AUDIO_VIZ | W | 16 band levels for music effects 20/22 (live, not stored); USB: bytes 8..23, one per band, Bit7; receiver/BT: nibble-packed from byte 1, no checksum (per monsgeek docs) — **not used by this app** | – |
+| 0x0E | SET_SCREEN_COLOR | W | `[1..3]=R,G,B` Bit7 — live colour for effect 21, **not stored**, whole keyboard (used for SignalRGB) | – |
 | 0x8C | GET_USERPIC | R | `[1]=slot [2]=0xFF [3]=page 0..5` | 6×64 raw = RGB triplets by matrix index |
 | 0x10 | SET_FN (Fn layer) | W | bulk or single, §4.2 | – |
 | 0x90 | GET_FN | R | `[1]=os (0 win,1 mac,2 android,3 ios) [2]=fnLayer(0) [3]=0xFF [4]=page 0..7` | 512 raw bytes |
 | 0x11 | SET_SLEEPTIME | W | 64-byte: u16 LE `[8..9]`=BT idle s, `[10..11]`=2.4G idle s, `[12..13]`=BT deep s, `[14..15]`=2.4G deep s | – |
 | 0x91 | GET_SLEEPTIME | R | | same offsets (defaults if no answer: 120,120,1680,1680) |
-| 0x12 | SET_USERGIF | W | per-key animation frames (not in X68 UI) | |
+| 0x12 | SET_USERGIF | W | per-key animation frames — **ignored by RY5088 firmware** (dispatch falls through in fw 2949 v408); belongs to another keyboard family in the shared vendor code; never sent | |
 | 0x17 | SET_AUTOOSEN (auto OS detect) | W | `[1]=0/1` | – |
 | 0x97 | GET_AUTOOSEN | R | | `resp[1]==1` |
 | 0x1B | SET_MAGNETISM_REPORT (live travel stream) | W | `[1]=0/1` | events `[0x1B,…]` §6 |
@@ -216,6 +218,11 @@ Kaleidoscope(out,in), PressActionOff, LineWave(→,←), Laser, CircleWave(ccw,c
 Breath, Neon, UserPicture(5 slots), MusicFollow2(upright/separate/intersect), ScreenColor. brightness max 4, speed max 4.
 MusicFollow/ScreenColor are host-driven (iot_driver streams colours) — skip or reimplement host-side.
 Per-key picture: §4 table rows 0x0C/0x8C; RGB array index = matrix slot.
+
+**No per-key live colour on the stock firmware.** Live paths are `0x0E` (one colour for the whole keyboard) and `0x0D`
+(music column bars, firmware rainbow or one solid colour). Per-key colour exists only as stored pictures (`0x0C`, flash
+area of 2048 B at 0x0802F800 on RY5088, right before the magnetism calibration). Evidence and the SignalRGB options:
+`docs/SIGNALRGB.md`.
 
 **Streaming colours (confirmed live 2026-11-01, id 2901, cable and receiver):** every `0x07` is stored in flash —
 the keyboard answers each one with busy/idle events `0F 01`/`0F 00` and restarts the effect (visible flicker when
