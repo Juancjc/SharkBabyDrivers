@@ -219,6 +219,8 @@ public sealed class X68Simulator : IX68Transport
     private byte[] _response = new byte[PacketLength];
     private readonly Dictionary<(byte Cmd, int A, int B), byte[]> _bulk = new();
     public X68Image State { get; }
+    /// <summary>Last colour received through SetScreenColor (0x0E).</summary>
+    public (byte R, byte G, byte B)? ScreenColor { get; private set; }
     public List<byte[]> Sent { get; } = new();
     public event Action<byte[]>? Event;
 
@@ -297,6 +299,7 @@ public sealed class X68Simulator : IX68Transport
                 Collect(cmd, (int)op, 0, p[3], payload, (p[3] + 1) * PageData >= size, size, d => d.CopyTo(s.He(profile, op), 0));
                 break;
             }
+            case SetScreenColor: ScreenColor = (p[1], p[2], p[3]); break;
             case SetMagnetismCal or SetMagnetismMaxCal or SetMagnetismReport or SetReset: break;
             default: throw new InvalidDataException($"comando desconhecido 0x{cmd:X2}");
         }

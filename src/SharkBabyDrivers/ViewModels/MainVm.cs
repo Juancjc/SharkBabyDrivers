@@ -19,6 +19,12 @@ public sealed class MainVm : ObservableObject, IDisposable
     private readonly AppSettings _settings = AppSettings.Load();
     private DeviceVm? _selected;
     private bool _refreshing;
+    private bool _windowVisible;
+    private readonly BackupStore _backups = new();
+
+    /// <summary>Who drives the keyboard lighting (SignalRGB bridge or the app), for the pages and the tray.</summary>
+    public Services.LightingCoordinator Lighting { get; }
+    public AppSettings Settings => _settings;
 
     public ObservableCollection<DeviceVm> Devices { get; } = new();
     public IReadOnlyList<Choice<string>> Languages { get; } = Loc.Languages.Select(l => new Choice<string>(l.Code, "", () => l.Name)).ToList();
@@ -29,6 +35,7 @@ public sealed class MainVm : ObservableObject, IDisposable
     public MainVm()
     {
         Loc.I.Language = _settings.Language;
+        Lighting = new Services.LightingCoordinator(_settings);
         _manager.Connected += d => Ui.Post(() => OnConnected(d));
         _manager.Disconnected += d => Ui.Post(() => OnDisconnected(d));
         _manager.OpenFailed += (model, ex) => App.Log(new IOException($"{model}: {ex.Message}", ex));
@@ -47,6 +54,21 @@ public sealed class MainVm : ObservableObject, IDisposable
             // A simulated X68 PRO HE to explore the keyboard pages without the cable (nothing touches real hardware).
             var sim = new X68Simulator(X68Simulator.FactoryImage());
             OnConnected(new X68Device(sim, "x68-demo") { TransferDelayMs = 0, WriteSettleMs = 0 });
+        }
+    }
+
+    /// <summary>
+    /// While only the tray icon is up, devices that already have their ORIGINAL backup are not read in full
+    /// (the lighting bridge needs just the lighting bytes); the pages load when the window is opened.
+    /// </summary>
+    public bool WindowVisible
+    {
+        get => _windowVisible;
+        set
+        {
+            _windowVisible = value;
+            if (!value) return;
+            foreach (var vm in Devices.Where(d => !d.Started)) _ = vm.InitializeAsync();
         }
     }
 
@@ -88,7 +110,7 @@ public sealed class MainVm : ObservableObject, IDisposable
         DeviceVm vm = device switch
         {
             X11Device m => new X11Vm(m),
-            X68Device k => new X68Vm(k),
+            X68Device k => new X68Vm(k, Lighting),
             _ => new UnsupportedDeviceVm(device),
         };
         Devices.Add(vm);
@@ -98,7 +120,8 @@ public sealed class MainVm : ObservableObject, IDisposable
             && Selected.Device.Model == device.Model
             && !Selected.IsDirty))
             Selected = vm;
-        _ = vm.InitializeAsync();
+        if (device is X68Device kb) Lighting.OnConnected(kb);
+        if (_windowVisible || !_backups.HasOriginal(device.DeviceKey)) _ = vm.InitializeAsync();
     }
 
     private void OnDisconnected(ISharkDevice device)
@@ -106,6 +129,7 @@ public sealed class MainVm : ObservableObject, IDisposable
         var vm = Devices.FirstOrDefault(d => d.Device == device);
         if (vm is null) return;
         Devices.Remove(vm);
+        if (device is X68Device kb) Lighting.OnDisconnected(kb);
         vm.Dispose();
         if (Selected == vm) Selected = Devices.FirstOrDefault();
         OnPropertyChanged(nameof(HasDevices));
@@ -116,6 +140,7 @@ public sealed class MainVm : ObservableObject, IDisposable
         _poll.Stop();
         _debounce.Stop();
         foreach (var d in Devices) d.Dispose();
+        Lighting.Dispose();
         _manager.Dispose();
     }
 }

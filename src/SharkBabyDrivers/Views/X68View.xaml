@@ -335,7 +335,25 @@
         <!-- ============================== LIGHTING ============================== -->
         <TabItem Header="{l:T tab_lighting}">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,16">
+                <StackPanel>
                 <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="{l:T light_owner_title}" Style="{StaticResource H2}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,8">
+                            <RadioButton Style="{StaticResource Segment}" GroupName="lightowner" Content="{l:T light_owner_app}" IsChecked="{Binding LightingByApp}"/>
+                            <RadioButton Style="{StaticResource Segment}" GroupName="lightowner" Content="{l:T light_owner_signal}" IsChecked="{Binding LightingBySignalRgb}"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding LightingStatusText}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                        <TextBlock Text="{l:T light_owner_hint}" Style="{StaticResource Hint}" Margin="0,0,0,10"/>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="{l:T signal_plugin_install}" Command="{Binding InstallSignalRgbPluginCommand}"/>
+                            <TextBlock Text="{Binding SignalRgbPluginText}" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+                <TextBlock Text="{l:T light_locked}" Style="{StaticResource Hint}" Foreground="{StaticResource Warn}" Margin="4,0,0,8"
+                           Visibility="{Binding LightingBySignalRgb, Converter={StaticResource VisIf}}"/>
+                <Border Style="{StaticResource Card}" IsEnabled="{Binding LightingEditable}">
                     <StackPanel>
                         <TextBlock Text="{l:T light_title}" Style="{StaticResource H2}"/>
                         <TextBlock Text="{l:T light_mode}" Style="{StaticResource Label}" Margin="0,10,0,6"/>
@@ -386,6 +404,7 @@
                         </StackPanel>
                     </StackPanel>
                 </Border>
+                </StackPanel>
             </ScrollViewer>
         </TabItem>
 

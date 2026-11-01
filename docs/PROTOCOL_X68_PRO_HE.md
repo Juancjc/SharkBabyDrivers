@@ -217,6 +217,11 @@ Breath, Neon, UserPicture(5 slots), MusicFollow2(upright/separate/intersect), Sc
 MusicFollow/ScreenColor are host-driven (iot_driver streams colours) — skip or reimplement host-side.
 Per-key picture: §4 table rows 0x0C/0x8C; RGB array index = matrix slot.
 
+**Streaming colours (confirmed live 2026-11-01, id 2901, cable and receiver):** every `0x07` is stored in flash —
+the keyboard answers each one with busy/idle events `0F 01`/`0F 00` and restarts the effect (visible flicker when
+sent per frame). For host-driven colour use mode 21 (ScreenColor) once, then **`0x0E` SET_SCREEN_COLOR**
+`[0E, R, G, B, 0, 0, 0, cksum7]`: not stored, no busy events, followed immediately. See `docs/SIGNALRGB.md`.
+
 ### 4.5 Hall-effect (magnetic switch) settings — 0x65 / 0xE5 **[CODE]**
 Bulk SET: `[0]=0x65 [1]=op [2]=1 [3]=page [4]=isLastOfWholeTransaction` + 56 B; Bulk GET: `[0]=0xE5 [1]=op [2]=1 [3]=page`.
 Per-key SET: `[0]=0x65 [1]=op [2]=0 [3]=slot [4]=isLast` + data (1, 2 or 4 bytes).

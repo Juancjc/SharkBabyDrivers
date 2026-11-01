@@ -16,15 +16,31 @@ public partial class App : Application
     private static readonly object LogLock = new();
     private Mutex? _instanceMutex;
 
+    /// <summary>True once the user chose Exit (closing the window only hides it to the tray).</summary>
+    public static bool ExitRequested { get; private set; }
+    /// <summary>Started by Windows at sign-in (or with --tray): stay in the tray, light, until the window is opened.</summary>
+    public static bool StartedInTray { get; } = Environment.GetCommandLineArgs().Contains("--tray", StringComparer.OrdinalIgnoreCase);
+
+    private EventWaitHandle? _showSignal;
+    private Services.TrayIcon? _tray;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         using var identity = WindowsIdentity.GetCurrent();
-        _instanceMutex = new Mutex(true, @"Local\SharkBabyDrivers-" + (identity.User?.Value ?? Environment.UserName), out var firstInstance);
+        var sid = identity.User?.Value ?? Environment.UserName;
+        _instanceMutex = new Mutex(true, @"Local\SharkBabyDrivers-" + sid, out var firstInstance);
         if (!firstInstance)
         {
             // This handle does not own the existing mutex.
             _instanceMutex.Dispose();
             _instanceMutex = null;
+            // Already running (maybe only in the tray): ask it to show its window and leave quietly.
+            if (EventWaitHandle.TryOpenExisting(@"Local\SharkBabyDrivers-show-" + sid, out var show))
+            {
+                using (show) if (!StartedInTray) show.Set();
+                Shutdown();
+                return;
+            }
         }
         if (!firstInstance || HasLegacyInstance())
         {
@@ -42,6 +58,36 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += (_, a) => Log(a.ExceptionObject as Exception);
         TaskScheduler.UnobservedTaskException += (_, a) => { Log(a.Exception); a.SetObserved(); };
         base.OnStartup(e);
+
+        var window = new MainWindow();
+        MainWindow = window;
+        _tray = new Services.TrayIcon(window, window.Vm);
+        _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\SharkBabyDrivers-show-" + sid);
+        var signal = _showSignal;
+        new Thread(() =>
+        {
+            try { while (signal.WaitOne()) Dispatcher.BeginInvoke(ShowMainWindow); }
+            catch (ObjectDisposedException) { }
+        }) { IsBackground = true, Name = "show-window" }.Start();
+        if (StartedInTray) window.PrepareHidden();
+        else window.Show();
+    }
+
+    public static void ShowMainWindow()
+    {
+        if (Current.MainWindow is not Window w) return;
+        w.Show();
+        if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
+        w.Activate();
+    }
+
+    /// <summary>Leaves the app for real (tray menu "Exit").</summary>
+    public static void RequestExit()
+    {
+        if (Current.MainWindow is MainWindow w && !w.ConfirmLeave()) return;
+        ExitRequested = true;
+        Current.MainWindow?.Close();
+        Current.Shutdown();
     }
 
     private static bool HasLegacyInstance()
@@ -60,6 +106,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _tray?.Dispose();
+        _showSignal?.Dispose();
         ReleaseInstanceMutex();
         base.OnExit(e);
     }

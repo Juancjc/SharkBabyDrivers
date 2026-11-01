@@ -123,8 +123,12 @@ public abstract class DeviceVm : ObservableObject, IDisposable
     }
 
     /// <summary>Reads the device, saves the ORIGINAL backup if the device has none yet, and loads the editor.</summary>
+    /// <summary>True once the page started reading the device (pages may wait while only the tray icon is up).</summary>
+    public bool Started { get; private set; }
+
     public async Task InitializeAsync()
     {
+        Started = true;
         Busy = true;
         State = DeviceState.Reading;
         StatusText = Loc.T("reading");
@@ -143,6 +147,7 @@ public abstract class DeviceVm : ObservableObject, IDisposable
             StatusText = "";
             IsDirty = false;
             if (saved is not null) ShowToast(Loc.T("backup_done"));
+            OnReady();
         }
         catch (NotSupportedException ex)
         {
@@ -288,6 +293,9 @@ public abstract class DeviceVm : ObservableObject, IDisposable
         DiscardChanges();
         IsDirty = false;
     }
+
+    /// <summary>Called after a successful read (the ORIGINAL backup exists by then).</summary>
+    protected virtual void OnReady() { }
 
     /// <summary>Adds a human-readable summary to a snapshot before it is saved. Default: nothing.</summary>
     protected virtual void Annotate(DeviceSnapshot snapshot) { }

@@ -42,6 +42,17 @@ public sealed class AppSettings
     public string Language { get; set; } = "pt-BR";
     public bool StartMinimized { get; set; }
 
+    /// <summary>Who drives the X68's lighting: <see cref="LightingOwners.App"/> or <see cref="LightingOwners.SignalRgb"/>.</summary>
+    public string KeyboardLightingOwner { get; set; } = LightingOwners.App;
+    /// <summary>The keyboard's own lighting (hex of the 0x87 answer) from before SignalRGB took over, restored when it hands back.</summary>
+    public string? KeyboardLedBeforeSignalRgb { get; set; }
+
     public static AppSettings Load() => JsonStore.LoadOrDefault(AppPaths.Settings, () => new AppSettings());
     public void Save() => JsonStore.Save(AppPaths.Settings, this);
+}
+
+public static class LightingOwners
+{
+    public const string App = "app";
+    public const string SignalRgb = "signalrgb";
 }

@@ -9,10 +9,20 @@ public sealed class X68Driver : IDeviceDriver
 {
     public string Model => "Attack Shark X68 PRO HE";
 
-    public bool Matches(IReadOnlyList<HidDeviceInfo> collections) =>
-        collections.Any(c => c.VendorId == VendorId
+    public bool Matches(IReadOnlyList<HidDeviceInfo> collections)
+    {
+        var cfg = collections.FirstOrDefault(c => c.VendorId == VendorId
                              && c.UsagePage == ConfigUsagePage && c.Usage == ConfigUsage && c.FeatureReportLength > 0
                              && c.ProductId is PidX68ProHeWired or PidX68HeWired or PidDongle);
+        if (cfg is null) return false;
+        // One keyboard, one connection: while the cable is plugged in the receiver is left alone (the keyboard
+        // talks over the cable then), so two controllers never drive the same keyboard.
+        return cfg.ProductId != PidDongle || !WiredKeyboardPresent();
+    }
+
+    private static bool WiredKeyboardPresent() =>
+        HidEnumerator.Enumerate((v, p) => v == VendorId && p is PidX68ProHeWired or PidX68HeWired)
+            .Any(c => c.UsagePage == ConfigUsagePage && c.Usage == ConfigUsage && c.FeatureReportLength > 0);
 
     public ISharkDevice Open(IReadOnlyList<HidDeviceInfo> collections)
     {
@@ -281,6 +291,35 @@ public sealed class X68Device : ISharkDevice
         VendorSleep();
     }
 
+    /// <summary>
+    /// While another program (SignalRGB, through <see cref="SendScreenColor"/>) owns the lighting, every write of
+    /// lighting settings is skipped: applying settings, loading a profile and restoring a backup leave it alone.
+    /// </summary>
+    public bool LightingLocked { get; set; }
+
+    /// <summary>
+    /// Streams one colour for the host-driven "screen colour" effect (mode 21). Unlike 0x07 it is not stored in
+    /// flash (no busy/idle report, no restart of the effect), so it can be sent many times per second.
+    /// </summary>
+    public void SendScreenColor(byte r, byte g, byte b) => Send(Command([SetScreenColor, r, g, b]));
+
+    /// <summary>Sleep timers (answer of 0x91): u16 LE seconds, [8] BT idle, [10] 2.4G idle, [12] BT deep, [14] 2.4G deep.</summary>
+    public byte[] ReadSleep() => QueryEcho(GetSleepTime);
+
+    /// <summary>Largest timer the firmware accepts (device database: 0..64800 s).</summary>
+    public const int MaxSleepSeconds = 64800;
+
+    /// <summary>The lighting parameters (answer of 0x87: mode, speed, brightness, option, R, G, B).</summary>
+    public byte[] ReadLed() => QueryEcho(GetLedParam);
+
+    /// <summary>Switches the effect to the host-driven screen colour (one flash write), keeping brightness.</summary>
+    public void EnterScreenColorMode(byte[] led, byte r, byte g, byte b)
+    {
+        var brightness = Math.Clamp((int)led[3], 1, X68Lighting.MaxBrightness);
+        Send(Command([SetLedParam, (byte)X68LightMode.ScreenColor, led[2], (byte)brightness, 0, r, g, b], bit8: true));
+        VendorSleep();
+    }
+
     public void WriteLed(byte[] led)
     {
         Send(Command([SetLedParam, led[1], led[2], led[3], led[4], led[5], led[6], led[7]], bit8: true));
@@ -293,8 +332,18 @@ public sealed class X68Device : ISharkDevice
         VendorSleep();
     }
 
+    public static bool SleepInRange(byte[] sleep)
+    {
+        for (var o = 8; o < 16; o += 2)
+            if ((sleep[o] | sleep[o + 1] << 8) > MaxSleepSeconds) return false;
+        return true;
+    }
+
     public void WriteSleep(byte[] sleep)
     {
+        // A backup taken while another program corrupted the answers once held 65108 s: never write that.
+        if (!SleepInRange(sleep))
+            throw new InvalidDataException("Os tempos de sono estão fora da faixa do teclado (0 a 64800 s); nada foi gravado neles.");
         Send(Command([SetSleepTime], sleep.AsSpan(8, 8)));
         VendorSleep();
     }
@@ -426,10 +475,14 @@ public sealed class X68Device : ISharkDevice
         foreach (var (idx, data) in img.Macros)
             if (before is null || !before.Macros.TryGetValue(idx, out var old) || MacroDiffers(data, old)) { progress?.Report($"macro {idx + 1}"); WriteMacro(idx, data); }
         for (var i = 0; i < img.UserPics.Length; i++)
-            if (Diff(img.UserPics[i], before?.UserPics[i])) { progress?.Report($"imagem LED {i + 1}"); WriteUserPic(i, img.UserPics[i]); }
-        if (Diff(img.Led.AsSpan(1, 7).ToArray(), before?.Led.AsSpan(1, 7).ToArray())) { progress?.Report("iluminação"); WriteLed(img.Led); }
+            if (!LightingLocked && Diff(img.UserPics[i], before?.UserPics[i])) { progress?.Report($"imagem LED {i + 1}"); WriteUserPic(i, img.UserPics[i]); }
+        // Lighting: never while another program owns it, and the host-driven screen-colour mode is only entered
+        // through EnterScreenColorMode (a profile or backup taken while SignalRGB owned the lights must not).
+        if (!LightingLocked && img.Led[1] != (byte)X68LightMode.ScreenColor
+            && Diff(img.Led.AsSpan(1, 7).ToArray(), before?.Led.AsSpan(1, 7).ToArray())) { progress?.Report("iluminação"); WriteLed(img.Led); }
         if (Diff(img.KbOption.AsSpan(2, 4).ToArray(), before?.KbOption.AsSpan(2, 4).ToArray())) WriteKbOption(img.KbOption);
-        if (Diff(img.Sleep.AsSpan(8, 8).ToArray(), before?.Sleep.AsSpan(8, 8).ToArray())) WriteSleep(img.Sleep);
+        // Out-of-range timers (seen in a backup read while another program garbled the answers) are left alone.
+        if (SleepInRange(img.Sleep) && Diff(img.Sleep.AsSpan(8, 8).ToArray(), before?.Sleep.AsSpan(8, 8).ToArray())) WriteSleep(img.Sleep);
         if (before is null || img.Report[2] != before.Report[2]) WritePolling(img.Report[2]);
         if (before is null || img.Debounce[1] != before.Debounce[1]) WriteDebounce(img.Debounce[1]);
         if (before is null || img.AutoOs[1] != before.AutoOs[1]) WriteAutoOs(img.AutoOsDetect);

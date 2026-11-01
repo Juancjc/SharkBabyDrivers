@@ -89,6 +89,8 @@ public sealed class X68Vm : DeviceVm
     private X68MacroVm? _selectedMacro;
     private bool _recording;
     private bool _calibrating;
+    private readonly Services.LightingCoordinator _lighting;
+    private readonly System.Windows.Threading.DispatcherTimer _lightingTimer = new() { Interval = TimeSpan.FromSeconds(1) };
 
     public X68Image Img { get; private set; } = new();
     public X68Model Model => Img.Model;
@@ -130,10 +132,73 @@ public sealed class X68Vm : DeviceVm
     public AsyncCommand ActivateProfileCommand { get; }
     public AsyncCommand CalibrateCommand { get; }
     public AsyncCommand FactoryResetCommand { get; }
+    public RelayCommand InstallSignalRgbPluginCommand { get; }
 
-    public X68Vm(X68Device device) : base(device)
+    // ------------------------------------------------------------------ lighting owner (SignalRGB bridge)
+
+    /// <summary>True when SignalRGB drives the lighting (through the SharkBabyDrivers plugin and bridge).</summary>
+    public bool LightingBySignalRgb
+    {
+        get => _lighting.SignalRgbOwns;
+        set
+        {
+            if (value == _lighting.SignalRgbOwns) return;
+            if (value && SignalRgbPluginState != Services.PluginState.Installed && App.Confirm(Loc.T("signal_plugin_offer")))
+                InstallSignalRgbPlugin();
+            _lighting.SetOwner(value);
+            OnLightingChanged();
+        }
+    }
+
+    public bool LightingByApp { get => !LightingBySignalRgb; set => LightingBySignalRgb = !value; }
+    /// <summary>The effect editor is usable only while the app owns the lighting.</summary>
+    public bool LightingEditable => !LightingBySignalRgb;
+    public string LightingStatusText => _lighting.Describe();
+    public Services.PluginState SignalRgbPluginState => Services.SignalRgbPlugin.State();
+    public string SignalRgbPluginText => Loc.T(SignalRgbPluginState switch
+    {
+        Services.PluginState.Installed => "signal_plugin_ok",
+        Services.PluginState.Outdated => "signal_plugin_outdated",
+        _ => "signal_plugin_missing",
+    });
+
+    private void InstallSignalRgbPlugin()
+    {
+        Services.SignalRgbPlugin.Install();
+        OnLightingChanged();
+        ShowToast(Loc.T("signal_plugin_installed"));
+    }
+
+    private void OnLightingChanged()
+    {
+        OnPropertyChanged(nameof(LightingBySignalRgb));
+        OnPropertyChanged(nameof(LightingByApp));
+        OnPropertyChanged(nameof(LightingEditable));
+        OnPropertyChanged(nameof(LightingStatusText));
+        OnPropertyChanged(nameof(SignalRgbPluginState));
+        OnPropertyChanged(nameof(SignalRgbPluginText));
+    }
+
+    /// <summary>The coordinator rewrote the keyboard's lighting (owner switch): show what the keyboard has now.</summary>
+    private void OnLightingLed(X68Device device, byte[] led)
+    {
+        if (device != _kb || !IsReady) return;
+        led.AsSpan(0, Math.Min(led.Length, _original.Led.Length)).CopyTo(_original.Led);
+        led.AsSpan(0, Math.Min(led.Length, Img.Led.Length)).CopyTo(Img.Led);
+        OnPropertyChanged(string.Empty);
+    }
+
+    protected override void OnReady() => _lighting.OnDeviceReady(_kb);
+
+    public X68Vm(X68Device device, Services.LightingCoordinator lighting) : base(device)
     {
         _kb = device;
+        _lighting = lighting;
+        _lighting.Changed += OnLightingChanged;
+        _lighting.LedChanged += OnLightingLed;
+        _lightingTimer.Tick += (_, _) => OnLightingChanged();
+        _lightingTimer.Start();
+        InstallSignalRgbPluginCommand = new RelayCommand(InstallSignalRgbPlugin);
         _kb.VendorEvent += e => Ui.Post(() => OnVendorEvent(e));
         SelectKeyCommand = new RelayCommand(p => SelectKey((KeyCapVm)p!));
         SelectAllCommand = new RelayCommand(() => { foreach (var c in Caps) c.IsSelected = true; OnSelectionChanged(); });
@@ -646,6 +711,7 @@ public sealed class X68Vm : DeviceVm
         var desired = CaptureEditorImage();
         var before = _original;
         await _kb.RunAsync(() => _kb.WriteImageVerified(desired, before));
+        _lighting.OnSleepWritten(_kb, desired.SleepSeconds24);
         _original = desired.Clone();
     }
 
@@ -655,6 +721,14 @@ public sealed class X68Vm : DeviceVm
         Img = _original.Clone();
         RebuildAll();
         EditProfile = profile;
+    }
+
+    public override void Dispose()
+    {
+        _lightingTimer.Stop();
+        _lighting.Changed -= OnLightingChanged;
+        _lighting.LedChanged -= OnLightingLed;
+        base.Dispose();
     }
 
     protected override void OnLanguageChanged()

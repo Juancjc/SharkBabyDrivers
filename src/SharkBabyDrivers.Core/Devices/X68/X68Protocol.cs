@@ -33,6 +33,7 @@ public static class X68Protocol
     public const byte SetKeyMatrix = 0x0A, GetKeyMatrix = 0x8A;
     public const byte SetMacro = 0x0B, GetMacro = 0x8B;
     public const byte SetUserPic = 0x0C, GetUserPic = 0x8C;
+    public const byte SetScreenColor = 0x0E;      // R,G,B for mode 21 (ScreenColor); streamed, not stored in flash
     public const byte SetFn = 0x10, GetFn = 0x90;
     public const byte SetSleepTime = 0x11, GetSleepTime = 0x91;
     public const byte SetAutoOs = 0x17, GetAutoOs = 0x97;

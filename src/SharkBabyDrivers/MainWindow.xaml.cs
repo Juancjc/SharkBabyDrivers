@@ -10,6 +10,8 @@ public partial class MainWindow : Window
     private const int WmDeviceChange = 0x0219;
     private readonly MainVm _vm;
 
+    public MainVm Vm => _vm;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -17,18 +19,34 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) =>
         {
             DarkTitleBar.Apply(this);
+            var handle = new WindowInteropHelper(this).Handle;
+            // Key presses of the Attack Shark keyboard bring its lights back after the idle light-off.
+            Services.KeyboardActivity.Register(handle);
             // Plug/unplug notifications trigger a rescan right away (a slow poll is the fallback).
-            HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook((IntPtr hwnd, int msg, IntPtr w, IntPtr l, ref bool handled) =>
+            HwndSource.FromHwnd(handle)?.AddHook((IntPtr hwnd, int msg, IntPtr w, IntPtr l, ref bool handled) =>
             {
                 if (msg == WmDeviceChange) _vm.RequestRefresh();
+                else if (msg == Services.KeyboardActivity.WmInput && Services.KeyboardActivity.IsAttackSharkKeyDown(l))
+                    _vm.Lighting.NotifyKeyActivity();
                 return IntPtr.Zero;
             });
         };
+        IsVisibleChanged += (_, _) => _vm.WindowVisible = IsVisible;
         Closing += (_, e) =>
         {
-            if (_vm.Devices.Any(d => d.IsDirty) && !App.Confirm(Localization.Loc.T("pending_changes") + " — " + Localization.Loc.T("discard") + "?"))
-                e.Cancel = true;
+            if (App.ExitRequested) return;
+            // The close button only hides the window: the tray icon keeps the keyboard's lighting running.
+            e.Cancel = true;
+            Hide();
         };
         Closed += (_, _) => _vm.Dispose();
     }
+
+    /// <summary>Creates the window handle (device notifications need it) without showing anything.</summary>
+    public void PrepareHidden() => new WindowInteropHelper(this).EnsureHandle();
+
+    /// <summary>Asks about unsaved edits before the app really exits.</summary>
+    public bool ConfirmLeave() =>
+        !_vm.Devices.Any(d => d.IsDirty)
+        || App.Confirm(Localization.Loc.T("pending_changes") + " — " + Localization.Loc.T("discard") + "?");
 }

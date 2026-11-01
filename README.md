@@ -52,9 +52,46 @@ Um app só, leve e em português (ou inglês), para configurar o **mouse Attack 
 > mudou desde a leitura. A leitura é mais lenta que pelo cabo.
 >
 > Aperte uma tecla antes de conectar para acordar o teclado; enquanto ele dorme, o app tenta novamente a cada
-> 3 segundos. O SignalRGB pode continuar aberto; controlar este mesmo teclado pelo receptor ao mesmo tempo
-> pode fazer as respostas se perderem. Se houver conflito ao configurar, pause apenas o controle deste teclado
-> no SignalRGB. O app avisa quando detecta esse tráfego.
+> 3 segundos.
+
+## SignalRGB e ícone na bandeja
+
+Escolha **quem controla a iluminação do teclado** na aba *Iluminação* do X68 ou no ícone da bandeja:
+
+- **SignalRGB:** o teclado entra no modo "cor da tela" e passa a seguir o SignalRGB (as fans e o resto continuam
+  no SignalRGB normalmente). As cores chegam pelo plugin do SharkBabyDrivers e é o próprio SharkBabyDrivers quem
+  as envia ao teclado, entre as suas leituras e gravações. Durante um backup, *Aplicar* ou carregar perfil, as
+  cores pausam por alguns segundos e voltam sozinhas. Enquanto o SignalRGB estiver no controle, o app não grava
+  iluminação (nem ao aplicar, carregar perfis ou restaurar backups).
+- **SharkBabyDrivers:** as cores do SignalRGB são ignoradas — nada do SignalRGB chega ao teclado — e o teclado
+  volta à iluminação que tinha antes.
+
+Na primeira vez, o app oferece instalar o plugin em `Documentos\WhirlwindFX\Plugins` (ele substitui o plugin
+padrão do X68 no SignalRGB); depois **reinicie o SignalRGB** e deixe o teclado ativado nele. Vale para o cabo e
+o receptor: com o cabo conectado o app usa só o cabo; ao desconectar, volta para o receptor.
+
+**Apagar a luz para poupar bateria (receptor):** o ajuste *Apagar luz após (sem fio)* (aba Desempenho) vale nos
+dois modos. Com o SharkBabyDrivers no controle, o próprio teclado apaga; com o SignalRGB, o app manda preto depois
+desse tempo sem tecla **neste** teclado e para de enviar (o rádio fica quieto); a primeira tecla traz as cores de
+volta. O app só percebe *quando* uma tecla do X68 é apertada (Raw Input do Windows), nunca *qual*. `0` = nunca.
+
+**Uma cor por vez:** com o SignalRGB, o teclado inteiro mostra uma cor só. O firmware original só aceita cor ao vivo
+para o teclado todo (`0x0E`); cor por tecla existe apenas como "imagem de LED" gravada na memória — mandar isso a
+cada quadro traria de volta as piscadas e o desgaste. Efeitos de duas cores (onda sobre um fundo) aparecem como a
+cor do ponto em que o teclado está no layout do SignalRGB, trocando conforme a onda passa.
+
+**Por que piscava:** o plugin padrão do SignalRGB envia o comando de iluminação `0x07` (modo, brilho e cor) a cada
+quadro. O teclado grava esse comando na memória e reinicia o efeito a cada vez — ~30 gravações por segundo. O
+plugin novo usa o comando de "cor da tela" `0x0E`, que não é gravado na memória e não reinicia nada.
+Detalhes e medições em [`docs/SIGNALRGB.md`](docs/SIGNALRGB.md).
+
+**Bandeja:** fechar a janela deixa o app no ícone da bandeja (perto do relógio), que mostra quem controla a
+iluminação, a conexão (cabo/receptor) e se as cores do SignalRGB estão chegando; o ponto no ícone fica com a
+cor atual. Pelo menu: alternar o controle, **Iniciar com o Windows** (abre só na bandeja, ~25 MB e quase nada de
+CPU, sem ler o teclado inteiro até você abrir a janela), abrir ou sair.
+
+> **Teclas vermelhas filtram a cor:** azul e verde aparecem fracos ou escurecidos sob keycaps vermelhas. Para
+> conferir a cor real, olhe um switch sem tecla.
 
 ## Baixar
 
@@ -102,7 +139,8 @@ o controle desse dispositivo no outro app durante a configuração.
 - `backups\<dispositivo>\original.json` — único backup original por dispositivo
 - `saved-profiles\<modelo>\*.sbd.json` — configurações salvas com nome na aba *Salvos e backup*
 - `profiles\` — botões e macros do X11 (o mouse não deixa ler isso de volta)
-- `settings.json`, `sharkbabydrivers.log`
+- `settings.json` (idioma, quem controla a iluminação), `sharkbabydrivers.log`
+- `lighting.log` — uma linha por mudança de estado da ponte com o SignalRGB (útil para pedir ajuda)
 
 ## Estrutura
 
@@ -110,6 +148,7 @@ o controle desse dispositivo no outro app durante a configuração.
 |---|---|
 | `src/SharkBabyDrivers.Core` | HID (P/Invoke, sem dependências), protocolos X11 e X68, backups, perfis |
 | `src/SharkBabyDrivers` | App WPF (.NET 8): tema escuro vermelho, PT-BR/EN |
+| `integrations/signalrgb` | Plugin do SignalRGB (embutido no app e instalado por ele) |
 | `tools/SharkBabyDrivers.Cli` | Diagnóstico: `list`, `dump`, `backup` (somente leitura) |
 | `tests/SharkBabyDrivers.Tests` | xUnit: checksums, codecs, capturas reais do X11, ciclos completos no simulador do X68 |
 | `docs/` | Protocolos documentados (engenharia reversa dos apps oficiais) |
