@@ -338,6 +338,19 @@
                 <StackPanel>
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
+                        <TextBlock Text="{l:T light_now_title}" Style="{StaticResource Label}"/>
+                        <TextBlock Text="{Binding LightNow.Effect}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                        <TextBlock Text="{Binding LightNow.Detail}" Style="{StaticResource Hint}" Margin="0,2,0,12"/>
+                        <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                            <c:X68LightBoard Model="{Binding Model}" State="{Binding LightPreview}"/>
+                        </Viewbox>
+                        <TextBlock Text="{l:T light_now_sim_hint}" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
+                        <TextBlock Text="{l:T light_now_pending}" Style="{StaticResource Hint}" Foreground="{StaticResource Warn}" Margin="0,6,0,0"
+                                   Visibility="{Binding LightPending, Converter={StaticResource VisIf}}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
                         <TextBlock Text="{l:T light_owner_title}" Style="{StaticResource H2}"/>
                         <StackPanel Orientation="Horizontal" Margin="0,8,0,8">
                             <RadioButton Style="{StaticResource Segment}" GroupName="lightowner" Content="{l:T light_owner_app}" IsChecked="{Binding LightingByApp}"/>

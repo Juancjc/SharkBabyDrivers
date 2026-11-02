@@ -186,6 +186,13 @@ public sealed class X68Vm : DeviceVm
     /// <summary>The effect editor is usable only while the app owns the lighting.</summary>
     public bool LightingEditable => !LightingBySignalRgb;
     public string LightingStatusText => _lighting.Describe();
+
+    /// <summary>The effect and colour the keyboard is showing now (device state, not pending edits).</summary>
+    public X68LightNow LightNow => X68LightNow.From(_original, _lighting.SignalRgbOwns, _lighting.LastColor);
+    /// <summary>The same, for the lit keyboard drawing.</summary>
+    public X68LightState LightPreview => X68LightState.From(_original, _lighting.SignalRgbOwns, _lighting.LastColor, _lighting.LightsDark);
+    /// <summary>The lighting editor holds values that were not applied to the keyboard yet.</summary>
+    public bool LightPending => !LightingBySignalRgb && !Img.Led.AsSpan().SequenceEqual(_original.Led);
     public Services.PluginState SignalRgbPluginState => Services.SignalRgbPlugin.State();
     public string SignalRgbPluginText => Loc.T(SignalRgbPluginState switch
     {
@@ -211,6 +218,14 @@ public sealed class X68Vm : DeviceVm
         OnPropertyChanged(nameof(SignalRgbPluginState));
         OnPropertyChanged(nameof(SignalRgbPluginText));
         OnPropertyChanged(nameof(CaptureStatusText));
+        OnLightNowChanged();
+    }
+
+    private void OnLightNowChanged()
+    {
+        OnPropertyChanged(nameof(LightNow));
+        OnPropertyChanged(nameof(LightPreview));
+        OnPropertyChanged(nameof(LightPending));
     }
 
     /// <summary>The coordinator rewrote the keyboard's lighting (owner switch): show what the keyboard has now.</summary>
@@ -625,9 +640,9 @@ public sealed class X68Vm : DeviceVm
     public bool HasLightColor => LightInfo.HasColor;
     public IReadOnlyList<Choice<int>> LightOptionChoices => Enumerable.Range(0, LightInfo.Options)
         .Select(i => new Choice<int>(i, $"klo_{LightInfo.Mode}_{i}", () => Loc.I[$"klo_{LightInfo.Mode}_{i}"] is var t && !t.StartsWith("klo_") ? t : $"{i + 1}")).ToList();
-    public int LightOption { get => Img.LightOption; set { Img.LightOption = value; MarkDirty(); OnPropertyChanged(); } }
-    public int LightBrightness { get => Img.LightBrightness; set { Img.LightBrightness = value; MarkDirty(); OnPropertyChanged(); } }
-    public int LightSpeed { get => Img.LightSpeed; set { Img.LightSpeed = value; MarkDirty(); OnPropertyChanged(); } }
+    public int LightOption { get => Img.LightOption; set { Img.LightOption = value; MarkDirty(); OnPropertyChanged(); OnLightNowChanged(); } }
+    public int LightBrightness { get => Img.LightBrightness; set { Img.LightBrightness = value; MarkDirty(); OnPropertyChanged(); OnLightNowChanged(); } }
+    public int LightSpeed { get => Img.LightSpeed; set { Img.LightSpeed = value; MarkDirty(); OnPropertyChanged(); OnLightNowChanged(); } }
     public bool LightRainbow { get => Img.LightRainbow; set { Img.LightRainbow = value; MarkDirty(); OnPropertyChanged(string.Empty); } }
     public string LightColor
     {
@@ -749,6 +764,7 @@ public sealed class X68Vm : DeviceVm
         await _kb.RunAsync(() => _kb.WriteImageVerified(desired, before));
         _lighting.OnSleepWritten(_kb, desired.SleepSeconds24);
         _original = desired.Clone();
+        OnLightNowChanged();
     }
 
     protected override void DiscardChanges()
