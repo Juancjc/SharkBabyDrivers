@@ -28,8 +28,10 @@ public sealed class X11Driver : IDeviceDriver
 [SupportedOSPlatform("windows")]
 public sealed class X11Device : ISharkDevice
 {
-    private readonly HidConnection _config;
+    private readonly HidConnection? _config;
     private readonly HidConnection? _events;
+    private readonly Dictionary<byte, byte[]>? _previewReports;
+    private readonly Dictionary<(byte Slot, byte Page), byte[]>? _previewMacroPages;
     private readonly SemaphoreSlim _busy = new(1, 1);
 
     public string DeviceKey { get; }
@@ -44,6 +46,31 @@ public sealed class X11Device : ISharkDevice
 
     /// <summary>Delay used by the official app between consecutive transfers.</summary>
     public TimeSpan Settle { get; init; } = TimeSpan.FromMilliseconds(120);
+
+    /// <summary>An isolated in-memory mouse for the UI preview; never opens a HID collection.</summary>
+    public static X11Device CreatePreview() => new();
+
+    private X11Device()
+    {
+        DeviceKey = "x11-demo-preview";
+        ProductId = X11Protocol.ProductIdDongle;
+        Link = LinkKind.Dongle;
+        Settle = TimeSpan.Zero;
+        _previewReports = new Dictionary<byte, byte[]>();
+        _previewMacroPages = new Dictionary<(byte Slot, byte Page), byte[]>();
+        ResetPreview();
+    }
+
+    private void ResetPreview()
+    {
+        var cfg = X11Config.FactoryDefault();
+        _previewReports!.Clear();
+        _previewMacroPages!.Clear();
+        _previewReports[X11Protocol.RidVersion] = [X11Protocol.RidVersion, X11Protocol.LenVersion, 0x01, 0x09, 0, 0, 0, 0];
+        _previewReports[X11Protocol.RidDpi] = cfg.DpiFrame();
+        _previewReports[X11Protocol.RidLight] = cfg.LightFrame();
+        _previewReports[X11Protocol.RidPoll] = cfg.PollFrame();
+    }
 
     public X11Device(IReadOnlyList<HidDeviceInfo> collections)
     {
@@ -89,6 +116,12 @@ public sealed class X11Device : ISharkDevice
     /// </summary>
     public byte[] ReadReport(byte rid, int length, byte flag, TimeSpan? timeout = null)
     {
+        if (_previewReports is not null)
+        {
+            if (!X11Protocol.ReadableReports.Any(r => r.Rid == rid && r.Length == length))
+                throw new InvalidOperationException($"Report 0x{rid:X2} is not readable on the preview mouse.");
+            return (byte[])_previewReports[rid].Clone();
+        }
         var deadline = DateTime.UtcNow + (timeout ?? WakeTimeout);
         Exception? last = null;
         var attempt = 0;
@@ -97,7 +130,7 @@ public sealed class X11Device : ISharkDevice
             try
             {
                 Thread.Sleep(Settle);
-                _config.SetFeature(X11Protocol.BuildReadRequest(rid, length, flag));
+                _config!.SetFeature(X11Protocol.BuildReadRequest(rid, length, flag));
                 Thread.Sleep(TimeSpan.FromMilliseconds(attempt == 0 ? 250 : 400));
                 var status = _config.GetFeature(X11Protocol.RidRead, X11Protocol.LenRead);
                 if (status[1] == 0x01)
@@ -124,12 +157,21 @@ public sealed class X11Device : ISharkDevice
 
     private void Send(byte[] frame)
     {
+        if (_previewReports is not null)
+        {
+            if (frame[0] == X11Protocol.RidVersion) throw new InvalidOperationException("The version report is read-only.");
+            if (frame[0] == X11Protocol.RidReset) ResetPreview();
+            else if (frame[0] == X11Protocol.RidMacro) _previewMacroPages![(frame[2], frame[3])] = (byte[])frame.Clone();
+            else _previewReports[frame[0]] = (byte[])frame.Clone();
+            if (frame[0] == X11Protocol.RidDpi) EventReceived?.Invoke(new X11Event.DpiStage(frame[24]));
+            return;
+        }
         Exception? last = null;
         for (var attempt = 0; attempt < 5; attempt++)
         {
             try
             {
-                _config.SetFeature(frame);
+                _config!.SetFeature(frame);
                 Thread.Sleep(TimeSpan.FromMilliseconds(200));
                 return;
             }
@@ -182,7 +224,7 @@ public sealed class X11Device : ISharkDevice
         if (dpiChanged || lightChanged)
         {
             SendVerified(desired.DpiFrame(), 3, 46); // byte 49 (one-shot animation) is not echoed reliably
-            Thread.Sleep(TimeSpan.FromMilliseconds(300));
+            if (_previewReports is null) Thread.Sleep(TimeSpan.FromMilliseconds(300));
         }
         if (lightChanged || dpiChanged)
             SendVerified(desired.LightFrame(), 3, 10);
@@ -215,6 +257,7 @@ public sealed class X11Device : ISharkDevice
     public Task<DeviceSnapshot> ReadSnapshotAsync(IProgress<string>? progress = null, CancellationToken ct = default) =>
         RunAsync(() =>
         {
+            if (_previewReports is not null) EventReceived?.Invoke(new X11Event.Battery(86, BatteryState.Discharging));
             var snap = new DeviceSnapshot { Model = Model, DeviceKey = DeviceKey, VendorId = VendorId, ProductId = ProductId };
             foreach (var (rid, len, flag) in X11Protocol.ReadableReports)
             {
@@ -251,7 +294,7 @@ public sealed class X11Device : ISharkDevice
     public void Dispose()
     {
         _events?.Dispose();
-        _config.Dispose();
+        _config?.Dispose();
         _busy.Dispose();
     }
 }

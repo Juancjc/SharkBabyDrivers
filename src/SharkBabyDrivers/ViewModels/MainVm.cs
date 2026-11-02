@@ -47,6 +47,7 @@ public sealed class MainVm : ObservableObject, IDisposable
         });
         if (App.IsPreview)
         {
+            OnConnected(X11Device.CreatePreview());
             var sim = new X68Simulator(X68Simulator.FactoryImage(2901, 0x0505));
             OnConnected(new X68Device(sim, "x68-demo-preview") { TransferDelayMs = 0, WriteSettleMs = 0 });
             return;

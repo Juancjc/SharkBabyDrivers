@@ -23,6 +23,7 @@ public sealed class Choice<T>(T value, string key, Func<string>? label = null) :
 public sealed class StageVm(X11Vm owner, int index) : ObservableObject
 {
     public int Index { get; } = index;
+    public int Number => Index + 1;
     public string Name => Loc.F("dpi_stage", Index + 1);
     private X11Config C => owner.Working;
 
@@ -72,12 +73,14 @@ public sealed class StageVm(X11Vm owner, int index) : ObservableObject
     public void Refresh() => OnPropertyChanged(string.Empty);
 }
 
-public sealed class ActionOption
+public sealed class ActionOption : ObservableObject
 {
+    private string _group = "";
+    private string _label = "";
     public required string Id { get; init; }
-    public required string Group { get; init; }
+    public required string Group { get => _group; set => Set(ref _group, value); }
     public required ButtonAction Action { get; init; }
-    public required string Label { get; init; }
+    public required string Label { get => _label; set => Set(ref _label, value); }
     public string? MacroName { get; init; }
     public override string ToString() => Label;
 }
@@ -85,6 +88,21 @@ public sealed class ActionOption
 public sealed class ButtonVm(X11Vm owner, X11Button button) : ObservableObject
 {
     public X11Button Button { get; } = button;
+    public ICollectionView ActionView => owner.ActionView;
+    public RelayCommand EditShortcutCommand => new(() => owner.EditShortcut(Button));
+    public int Number => Button switch
+    {
+        X11Button.Left => 1, X11Button.Right => 2, X11Button.Middle => 3,
+        X11Button.Forward => 4, X11Button.Backward => 5, _ => 6,
+    };
+    public string AssignmentText
+    {
+        get
+        {
+            var option = owner.FindOption(Button);
+            return option?.Action.IsKeyboard == true ? X11Vm.DescribeKey(option.Action) : option?.Label ?? "—";
+        }
+    }
     public string Name => Loc.T(Button switch
     {
         X11Button.Left => "btn_left", X11Button.Right => "btn_right", X11Button.Middle => "btn_middle",
@@ -96,10 +114,12 @@ public sealed class ButtonVm(X11Vm owner, X11Button button) : ObservableObject
         get => owner.FindOption(Button);
         set
         {
-            if (value is null) return;
+            if (value is null || value.Id == owner.FindOption(Button)?.Id) return;
             owner.Assign(Button, value);
         }
     }
+
+    public string? SelectedActionId => owner.FindOption(Button)?.Id;
 
     public void Refresh() => OnPropertyChanged(string.Empty);
 }
@@ -179,6 +199,7 @@ public sealed class X11Vm : DeviceVm
     public RelayCommand ClearMacroCommand { get; }
     public RelayCommand RemoveStepCommand { get; }
     public RelayCommand InsertClickCommand { get; }
+    public RelayCommand EditShortcutCommand => new(p => { if (p is X11Button button) EditShortcut(button); });
     public AsyncCommand FactoryResetCommand { get; }
 
     public X11Vm(X11Device device) : base(device)
@@ -190,6 +211,8 @@ public sealed class X11Vm : DeviceVm
         foreach (var b in X11Buttons.Physical) Buttons.Add(new ButtonVm(this, b));
         ActionView = CollectionViewSource.GetDefaultView(ActionOptions);
         ActionView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ActionOption.Group)));
+        if (ActionView is ICollectionViewLiveShaping { CanChangeLiveGrouping: true } liveView)
+            liveView.IsLiveGrouping = true;
         BuildActionOptions();
 
         ResetButtonsCommand = new RelayCommand(() =>
@@ -295,19 +318,35 @@ public sealed class X11Vm : DeviceVm
 
     private void BuildActionOptions()
     {
-        ActionOptions.Clear();
+        var options = new List<ActionOption>();
         foreach (var p in X11Actions.Presets)
-            ActionOptions.Add(new ActionOption { Id = p.Id, Group = Loc.T($"grp_{p.Group}"), Action = p.Action, Label = Loc.T($"act_{p.Id}") });
+            options.Add(new ActionOption { Id = p.Id, Group = Loc.T($"grp_{p.Group}"), Action = p.Action, Label = Loc.T($"act_{p.Id}") });
         foreach (var m in Profile.Macros)
-            ActionOptions.Add(new ActionOption { Id = "macro:" + m.Name, Group = Loc.T("tab_macros"), Action = ButtonAction.Macro(0), Label = Loc.F("act_macro", m.Name), MacroName = m.Name });
+            options.Add(new ActionOption { Id = "macro:" + m.Name, Group = Loc.T("tab_macros"), Action = ButtonAction.Macro(0), Label = Loc.F("act_macro", m.Name), MacroName = m.Name });
         // Custom shortcuts currently in use get their own entry so the combo can show them.
         foreach (var dto in Profile.Buttons.Where(d => d.Code == ButtonAction.KeyboardCode))
         {
             var a = dto.ToAction();
-            if (X11Actions.FindPreset(a) is null && ActionOptions.All(o => o.Action != a))
-                ActionOptions.Add(new ActionOption { Id = "key:" + a, Group = Loc.T("grp_Shortcut"), Action = a, Label = Loc.F("act_key", DescribeKey(a)) });
+            if (X11Actions.FindPreset(a) is null && options.All(o => o.Action != a))
+                options.Add(new ActionOption { Id = "key:" + a, Group = Loc.T("grp_Shortcut"), Action = a, Label = Loc.F("act_key", DescribeKey(a)) });
         }
-        ActionOptions.Add(new ActionOption { Id = "custom", Group = Loc.T("grp_Shortcut"), Action = X11Actions.Disabled, Label = Loc.T("custom_shortcut") });
+        options.Add(new ActionOption { Id = "custom", Group = Loc.T("grp_Shortcut"), Action = X11Actions.Disabled, Label = Loc.T("custom_shortcut") });
+
+        // Keep unchanged options attached to their selectors while a device/profile finishes loading.
+        // Clearing the shared view invalidates selection in controls that are still being bound.
+        for (var i = 0; i < options.Count; i++)
+        {
+            var next = options[i];
+            var existing = ActionOptions.FirstOrDefault(o => o.Id == next.Id && o.Action == next.Action && o.MacroName == next.MacroName);
+            if (existing is null) ActionOptions.Insert(i, next);
+            else
+            {
+                existing.Label = next.Label;
+                existing.Group = next.Group;
+                if (ActionOptions.IndexOf(existing) != i) ActionOptions.Move(ActionOptions.IndexOf(existing), i);
+            }
+        }
+        while (ActionOptions.Count > options.Count) ActionOptions.RemoveAt(ActionOptions.Count - 1);
     }
 
     public static string DescribeKey(ButtonAction a)
@@ -333,15 +372,23 @@ public sealed class X11Vm : DeviceVm
     }
 
     /// <summary>Set from the UI. "custom" asks the view to capture a shortcut first.</summary>
-    public Func<ButtonAction?>? CaptureShortcut { get; set; }
+    public Func<ButtonAction?, ButtonAction?>? CaptureShortcut { get; set; }
+
+    public void EditShortcut(X11Button button)
+    {
+        var current = Profile.Buttons[(int)button].ToAction();
+        if (CaptureShortcut?.Invoke(current.IsKeyboard ? current : null) is not { } captured) return;
+        Assign(button, new ActionOption { Id = "key:" + captured, Group = "", Action = captured, Label = "" });
+    }
 
     public void Assign(X11Button button, ActionOption option)
     {
         var slot = (int)button;
         if (option.Id == "custom")
         {
-            if (CaptureShortcut?.Invoke() is not { } captured) { Buttons.First(b => b.Button == button).Refresh(); return; }
-            option = new ActionOption { Id = "key:" + captured, Group = "", Action = captured, Label = "" };
+            EditShortcut(button);
+            Buttons.First(b => b.Button == button).Refresh();
+            return;
         }
         if (option.MacroName is { } name)
         {

@@ -26,6 +26,9 @@ Um app só, leve e em português (ou inglês), para configurar o **mouse Attack 
 ## O que dá para configurar
 
 **Mouse X11** (cabo ou receptor 2.4G)
+- Painel com desenho clicável do mouse, botões numerados e ajustes expansíveis
+- Modal para escolher uma tecla ou combinação (ex.: A, F5, Ctrl+A), com prévia e confirmação
+- Carregue ou importe um perfil no próprio painel, edite os ajustes e salve no mesmo perfil ou em uma nova cópia
 - 8 estágios de DPI (50–22 000) com cor de cada um e estágio em uso
 - Taxa de polling 125/250/500/1000 Hz, angle snap, ripple control, debounce (4–50 ms)
 - Função dos 6 botões: cliques, DPI, mídia, navegador, atalhos prontos, atalho personalizado, macro
@@ -133,7 +136,7 @@ do SharkBabyDrivers pode ficar aberta por vez, para evitar disputa pelo disposit
 ```powershell
 dotnet run --project src/SharkBabyDrivers            # app
 dotnet run --project src/SharkBabyDrivers -- --demo  # + um X68 simulado para conhecer as telas
-dotnet run --project src/SharkBabyDrivers -- --preview # prévia isolada, somente simulador, sem acessar HID/SignalRGB
+dotnet run --project src/SharkBabyDrivers -- --preview # prévia isolada de mouse + teclado simulados, sem acessar HID/SignalRGB
 dotnet test                                          # testes de protocolo e do simulador do teclado
 ```
 

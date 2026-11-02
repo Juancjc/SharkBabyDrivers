@@ -15,6 +15,7 @@ public partial class X11View : UserControl
 {
     private readonly Stopwatch _sinceLast = new();
     private readonly HashSet<byte> _down = new();
+    private bool _updatingActionPicker;
 
     public X11View()
     {
@@ -22,9 +23,9 @@ public partial class X11View : UserControl
         DataContextChanged += (_, _) =>
         {
             if (DataContext is X11Vm vm)
-                vm.CaptureShortcut = () =>
+                vm.CaptureShortcut = initial =>
                 {
-                    var dlg = new ShortcutDialog { Owner = Window.GetWindow(this) };
+                    var dlg = new ShortcutDialog(initial) { Owner = Window.GetWindow(this) };
                     dlg.ShowDialog();
                     return dlg.Result;
                 };
@@ -34,6 +35,43 @@ public partial class X11View : UserControl
     }
 
     private X11Vm? Vm => DataContext as X11Vm;
+
+    private void ActionPicker_DropDownOpened(object? sender, EventArgs e)
+    {
+        if (sender is ComboBox { DataContext: ButtonVm button } picker)
+        {
+            _updatingActionPicker = true;
+            try { picker.SetCurrentValue(ComboBox.SelectedItemProperty, button.Selected); }
+            finally { _updatingActionPicker = false; }
+        }
+    }
+
+    private void ActionPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox { IsDropDownOpen: true }) CommitActionPicker(sender);
+    }
+
+    private void ActionPicker_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is ComboBox { IsDropDownOpen: false }) ActionPicker_DropDownOpened(sender, EventArgs.Empty);
+    }
+
+    private void ActionPicker_PreviewKeyUp(object sender, KeyEventArgs e)
+    {
+        if (sender is ComboBox { IsDropDownOpen: false } && e.Key != Key.Escape)
+            CommitActionPicker(sender);
+    }
+
+    private void CommitActionPicker(object? sender)
+    {
+        if (_updatingActionPicker) return;
+        if (sender is ComboBox { DataContext: ButtonVm button, SelectedItem: ActionOption option })
+        {
+            _updatingActionPicker = true;
+            try { button.Selected = option; }
+            finally { _updatingActionPicker = false; }
+        }
+    }
 
     private void Record(KeyEventArgs e, bool down)
     {

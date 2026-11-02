@@ -6,220 +6,473 @@
              xmlns:c="clr-namespace:SharkBabyDrivers.Controls"
              xmlns:v="clr-namespace:SharkBabyDrivers.Views">
     <UserControl.Resources>
-        <Style x:Key="Row" TargetType="DockPanel">
-            <Setter Property="Margin" Value="0,10,0,0"/>
-            <Setter Property="LastChildFill" Value="True"/>
+        <Style x:Key="MouseCard" TargetType="Border" BasedOn="{StaticResource Card}">
+            <Setter Property="Padding" Value="14"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+            <Setter Property="CornerRadius" Value="14"/>
+        </Style>
+        <Style x:Key="MouseSmallButton" TargetType="Button" BasedOn="{StaticResource BaseButton}">
+            <Setter Property="Padding" Value="7,5"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+        <!-- The displayed assignment comes from the profile, independently of the transient
+             selection of a grouped picker while custom actions are inserted or removed. -->
+        <Style x:Key="MouseActionPicker" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton Style="{StaticResource ComboToggle}"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"/>
+                            <TextBlock Text="{Binding AssignmentText}" Margin="10,0,28,0" VerticalAlignment="Center"
+                                       IsHitTestVisible="False" FontSize="{TemplateBinding FontSize}"/>
+                            <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True" Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}" PopupAnimation="Fade">
+                                <Border Margin="0,4,0,0" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}" Background="{StaticResource Surface2}"
+                                        BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="12" Padding="5">
+                                    <ScrollViewer><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="MouseNavigation" TargetType="RadioButton" BasedOn="{StaticResource BaseButton}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+            <Setter Property="FontSize" Value="12"/>
         </Style>
         <Style x:Key="Value" TargetType="TextBlock" BasedOn="{StaticResource Label}">
-            <Setter Property="Width" Value="90"/>
+            <Setter Property="Width" Value="70"/>
             <Setter Property="TextAlignment" Value="Right"/>
             <Setter Property="Foreground" Value="{StaticResource Accent}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style x:Key="DpiFill" TargetType="RepeatButton">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Border Width="5" CornerRadius="2.5" Background="{TemplateBinding Background}"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="VerticalDpi" TargetType="Slider">
+            <Setter Property="Orientation" Value="Vertical"/>
+            <Setter Property="IsMoveToPointEnabled" Value="True"/>
+            <Setter Property="IsSnapToTickEnabled" Value="True"/>
+            <Setter Property="TickFrequency" Value="50"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid x:Name="SliderArea" Width="26" Background="Transparent">
+                            <Track x:Name="PART_Track" Orientation="Vertical"
+                                   IsDirectionReversed="{TemplateBinding IsDirectionReversed}">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource DpiFill}" Background="{StaticResource Accent}" Command="Slider.DecreaseLarge"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource DpiFill}" Background="{StaticResource Surface3}" Command="Slider.IncreaseLarge"/>
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb><Thumb Style="{StaticResource SliderThumb}"/></Track.Thumb>
+                            </Track>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.3"/></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="SliderArea" Property="Background" Value="{StaticResource AccentDim}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="MouseSection" TargetType="Expander">
+            <Setter Property="Margin" Value="0,0,0,9"/>
+            <Setter Property="Foreground" Value="{StaticResource Text}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Expander">
+                        <Border x:Name="SectionBorder" CornerRadius="12" Background="{StaticResource Surface}"
+                                BorderBrush="{StaticResource Border}" BorderThickness="1">
+                            <DockPanel>
+                                <ToggleButton DockPanel.Dock="Top" FocusVisualStyle="{x:Null}" Cursor="Hand"
+                                              IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <ToggleButton.Template>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="HeaderBorder" Padding="14,12" Background="Transparent" CornerRadius="11">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                    <ContentPresenter Content="{Binding Header, RelativeSource={RelativeSource AncestorType=Expander}}"
+                                                                      VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                                                    <TextBlock x:Name="Chevron" Grid.Column="1" Text="&#xE70D;" Style="{StaticResource Icon}"
+                                                               Foreground="{StaticResource Muted}" FontSize="10" Margin="12,0,0,0"/>
+                                                </Grid>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="HeaderBorder" Property="Background" Value="{StaticResource Surface2}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                                    <Setter TargetName="HeaderBorder" Property="Background" Value="{StaticResource Surface2}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="Chevron" Property="Text" Value="&#xE70E;"/>
+                                                    <Setter TargetName="Chevron" Property="Foreground" Value="{StaticResource Accent}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </ToggleButton.Template>
+                                </ToggleButton>
+                                <Border x:Name="SectionContent" Padding="14,0,14,14" Visibility="Collapsed"><ContentPresenter/></Border>
+                            </DockPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="True">
+                                <Setter TargetName="SectionContent" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="SectionBorder" Property="BorderBrush" Value="{StaticResource AccentSoft}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </UserControl.Resources>
 
-    <TabControl Margin="32,0,32,0" IsEnabled="{Binding IsReady}">
-        <!-- ============================== PERFORMANCE ============================== -->
-        <TabItem Header="{l:T tab_performance}">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,16">
-                <StackPanel>
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel>
-                            <TextBlock Text="{l:T dpi_title}" Style="{StaticResource H2}"/>
-                            <TextBlock Text="{l:T dpi_hint}" Style="{StaticResource Hint}" Margin="0,0,0,8"/>
-                            <ItemsControl ItemsSource="{Binding Stages}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type vm:StageVm}">
-                                        <Grid Margin="0,6">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="44"/>
-                                                <ColumnDefinition Width="34"/>
-                                                <ColumnDefinition Width="96"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="92"/>
-                                                <ColumnDefinition Width="50"/>
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding Enabled}" VerticalAlignment="Center"/>
-                                            <RadioButton Grid.Column="1" Style="{StaticResource Dot}" GroupName="{Binding DataContext.Title, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                         IsChecked="{Binding IsActive, Mode=TwoWay}" IsEnabled="{Binding Enabled}" ToolTip="{l:T dpi_active}" VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="2" Text="{Binding Name}" Style="{StaticResource Label}" Margin="4,0,0,0"/>
-                                            <Slider Grid.Column="3" Minimum="50" Maximum="22000" SmallChange="50" LargeChange="400" Value="{Binding Dpi, Delay=150}"
-                                                    IsEnabled="{Binding Enabled}" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                                            <TextBox Grid.Column="4" Text="{Binding Dpi, UpdateSourceTrigger=LostFocus}" IsEnabled="{Binding Enabled}" TextAlignment="Right"/>
-                                            <c:ColorButton Grid.Column="5" Color="{Binding Color}" HorizontalAlignment="Right" IsEnabled="{Binding Enabled}"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel>
-                            <TextBlock Text="{l:T polling_title}" Style="{StaticResource H2}"/>
-                            <TextBlock Text="{l:T polling_hint}" Style="{StaticResource Hint}" Margin="0,0,0,10"/>
-                            <StackPanel Orientation="Horizontal">
-                                <RadioButton Style="{StaticResource Segment}" Content="125 Hz" IsChecked="{Binding PollingHz, Converter={StaticResource Eq}, ConverterParameter=125}"/>
-                                <RadioButton Style="{StaticResource Segment}" Content="250 Hz" IsChecked="{Binding PollingHz, Converter={StaticResource Eq}, ConverterParameter=250}"/>
-                                <RadioButton Style="{StaticResource Segment}" Content="500 Hz" IsChecked="{Binding PollingHz, Converter={StaticResource Eq}, ConverterParameter=500}"/>
-                                <RadioButton Style="{StaticResource Segment}" Content="1000 Hz" IsChecked="{Binding PollingHz, Converter={StaticResource Eq}, ConverterParameter=1000}"/>
+    <TabControl Margin="24,0,24,0" IsEnabled="{Binding IsReady}">
+        <TabItem Header="{l:T mouse_overview}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,16">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="200"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*" MinWidth="170"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="324"/>
+                    </Grid.ColumnDefinitions>
+                    <!-- Assignments, profiles and battery stay beside the mouse. -->
+                    <StackPanel>
+                        <Border Style="{StaticResource MouseCard}">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,9">
+                                    <Button DockPanel.Dock="Right" Command="{Binding ResetButtonsCommand}" ToolTip="{l:T buttons_reset}"
+                                            Style="{StaticResource Ghost}" Padding="5" MinHeight="24" Width="26">
+                                        <TextBlock Text="&#xE777;" Style="{StaticResource Icon}" FontSize="12"/>
+                                    </Button>
+                                    <TextBlock Text="{l:T tab_buttons}" Style="{StaticResource H2}" Margin="0" VerticalAlignment="Center" ToolTip="{l:T buttons_hint}"/>
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding Buttons}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:ButtonVm}">
+                                            <StackPanel Margin="0,0,0,9">
+                                                <DockPanel Margin="0,0,0,5">
+                                                    <Border DockPanel.Dock="Left" Background="{StaticResource AccentDim}" CornerRadius="5" Width="19" Height="19" Margin="0,0,7,0">
+                                                        <TextBlock Text="{Binding Number}" Foreground="{StaticResource Accent}" FontSize="10"
+                                                                   FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <TextBlock Text="{Binding Name}" FontSize="10.5" Foreground="{StaticResource Muted}"
+                                                               VerticalAlignment="Center" ToolTip="{Binding Name}"/>
+                                                </DockPanel>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
+                                                    <ComboBox Style="{StaticResource MouseActionPicker}" MinHeight="30" FontSize="11" ToolTip="{Binding AssignmentText}" IsSynchronizedWithCurrentItem="False"
+                                                              ItemsSource="{Binding ActionView}"
+                                                              SelectedValuePath="Id" DisplayMemberPath="Label"
+                                                              DropDownOpened="ActionPicker_DropDownOpened" SelectionChanged="ActionPicker_SelectionChanged"
+                                                              PreviewKeyDown="ActionPicker_PreviewKeyDown" PreviewKeyUp="ActionPicker_PreviewKeyUp">
+                                                        <ComboBox.GroupStyle>
+                                                            <GroupStyle>
+                                                                <GroupStyle.HeaderTemplate>
+                                                                    <DataTemplate>
+                                                                        <TextBlock Text="{Binding Name}" Foreground="{StaticResource Accent}" FontSize="11"
+                                                                                   FontWeight="SemiBold" Margin="8,8,0,2"/>
+                                                                    </DataTemplate>
+                                                                </GroupStyle.HeaderTemplate>
+                                                            </GroupStyle>
+                                                        </ComboBox.GroupStyle>
+                                                    </ComboBox>
+                                                    <Button Grid.Column="1" Command="{Binding EditShortcutCommand}" Margin="5,0,0,0"
+                                                            Style="{StaticResource MouseSmallButton}" Padding="0" ToolTip="{l:T shortcut_edit}" AutomationProperties.Name="{l:T shortcut_edit}">
+                                                        <TextBlock Text="&#xE70F;" Style="{StaticResource Icon}" FontSize="12"/>
+                                                    </Button>
+                                                </Grid>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </StackPanel>
-                            <TextBlock Text="{l:T polling_wired_note}" Style="{StaticResource Hint}" Margin="0,8,0,0" Visibility="{Binding IsWired, Converter={StaticResource VisIf}}"/>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel>
-                            <TextBlock Text="{l:T sensor_title}" Style="{StaticResource H2}"/>
-                            <DockPanel Style="{StaticResource Row}">
-                                <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding AngleSnap}"/>
-                                <StackPanel>
-                                    <TextBlock Text="{l:T angle_snap}" Style="{StaticResource Label}"/>
-                                    <TextBlock Text="{l:T angle_snap_hint}" Style="{StaticResource Hint}"/>
-                                </StackPanel>
-                            </DockPanel>
-                            <DockPanel Style="{StaticResource Row}">
-                                <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding Ripple}"/>
-                                <StackPanel>
-                                    <TextBlock Text="{l:T ripple}" Style="{StaticResource Label}"/>
-                                    <TextBlock Text="{l:T ripple_hint}" Style="{StaticResource Hint}"/>
-                                </StackPanel>
-                            </DockPanel>
-                            <TextBlock Text="{l:T debounce}" Style="{StaticResource Label}" Margin="0,16,0,0"/>
-                            <TextBlock Text="{l:T debounce_hint}" Style="{StaticResource Hint}"/>
-                            <DockPanel Margin="0,6,0,0">
-                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding DebounceMs, StringFormat={}{0} ms}"/>
-                                <Slider Minimum="4" Maximum="50" TickFrequency="2" IsSnapToTickEnabled="True" Value="{Binding DebounceMs}"/>
-                            </DockPanel>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
-        </TabItem>
-
-        <!-- ============================== BUTTONS ============================== -->
-        <TabItem Header="{l:T tab_buttons}">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,16">
-                <Border Style="{StaticResource Card}">
-                    <StackPanel>
-                        <DockPanel>
-                            <Button DockPanel.Dock="Right" Content="{l:T buttons_reset}" Command="{Binding ResetButtonsCommand}"/>
-                            <TextBlock Text="{l:T buttons_title}" Style="{StaticResource H2}"/>
-                        </DockPanel>
-                        <TextBlock Text="{l:T buttons_hint}" Style="{StaticResource Hint}" Margin="0,0,0,10"/>
-                        <ItemsControl ItemsSource="{Binding Buttons}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="{x:Type vm:ButtonVm}">
-                                    <Grid Margin="0,6">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="260"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{Binding Name}" Style="{StaticResource Label}"/>
-                                        <ComboBox Grid.Column="1" MaxWidth="420" HorizontalAlignment="Left" MinWidth="320"
-                                                  ItemsSource="{Binding DataContext.ActionView, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                  SelectedItem="{Binding Selected, Mode=TwoWay}" DisplayMemberPath="Label">
-                                            <ComboBox.GroupStyle>
-                                                <GroupStyle>
-                                                    <GroupStyle.HeaderTemplate>
-                                                        <DataTemplate>
-                                                            <TextBlock Text="{Binding Name}" Foreground="{StaticResource Accent}" FontSize="11.5" FontWeight="SemiBold" Margin="8,8,0,2"/>
-                                                        </DataTemplate>
-                                                    </GroupStyle.HeaderTemplate>
-                                                </GroupStyle>
-                                            </ComboBox.GroupStyle>
-                                        </ComboBox>
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
-            </ScrollViewer>
-        </TabItem>
-
-        <!-- ============================== LIGHTING ============================== -->
-        <TabItem Header="{l:T tab_lighting}">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,16">
-                <Border Style="{StaticResource Card}">
-                    <StackPanel>
-                        <TextBlock Text="{l:T light_title}" Style="{StaticResource H2}"/>
-                        <TextBlock Text="{l:T light_mode}" Style="{StaticResource Label}" Margin="0,10,0,6"/>
-                        <WrapPanel>
-                            <ItemsControl ItemsSource="{Binding LightModes}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <RadioButton Style="{StaticResource Segment}" Content="{Binding Label}" Margin="0,0,6,6" GroupName="x11light"
-                                                     Command="{Binding DataContext.SetLightModeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding Value}">
-                                            <RadioButton.IsChecked>
-                                                <MultiBinding Mode="OneWay" Converter="{x:Static v:MultiEquals.Instance}">
-                                                    <Binding Path="Value"/>
-                                                    <Binding Path="DataContext.LightMode" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
-                                                </MultiBinding>
-                                            </RadioButton.IsChecked>
-                                        </RadioButton>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </WrapPanel>
-
-                        <StackPanel Visibility="{Binding LightUsesColor, Converter={StaticResource VisIf}}" Margin="0,12,0,0">
+                        </Border>
+                        <RadioButton Style="{StaticResource MouseNavigation}" IsChecked="{Binding IsSelected, ElementName=MacrosTab, Mode=TwoWay}">
                             <DockPanel>
-                                <c:ColorButton DockPanel.Dock="Right" Color="{Binding LightColor}"/>
-                                <StackPanel>
-                                    <TextBlock Text="{l:T light_color}" Style="{StaticResource Label}"/>
-                                    <TextBlock Text="{l:T light_color_hint}" Style="{StaticResource Hint}"/>
-                                </StackPanel>
+                                <TextBlock DockPanel.Dock="Left" Text="&#xE912;" Style="{StaticResource Icon}"
+                                           Foreground="{StaticResource Accent}" FontSize="14" Margin="0,0,9,0"/>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding Macros.Count}" Foreground="{StaticResource Muted}" FontSize="11"/>
+                                <TextBlock Text="{l:T tab_macros}" FontSize="12"/>
                             </DockPanel>
-                        </StackPanel>
-                        <StackPanel Visibility="{Binding LightUsesBrightness, Converter={StaticResource VisIf}}" Margin="0,16,0,0">
-                            <TextBlock Text="{l:T brightness}" Style="{StaticResource Label}"/>
-                            <DockPanel Margin="0,6,0,0">
-                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding Brightness, StringFormat={}{0} / 8}"/>
-                                <Slider Minimum="1" Maximum="8" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Brightness}"/>
-                            </DockPanel>
-                        </StackPanel>
-                        <StackPanel Visibility="{Binding LightUsesSpeed, Converter={StaticResource VisIf}}" Margin="0,16,0,0">
-                            <TextBlock Text="{l:T speed}" Style="{StaticResource Label}"/>
-                            <DockPanel Margin="0,6,0,0">
-                                <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding Speed, StringFormat={}{0} / 8}"/>
-                                <Slider Minimum="1" Maximum="8" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Speed}"/>
-                            </DockPanel>
-                        </StackPanel>
-                        <TextBlock Text="{l:T brightness_hint}" Style="{StaticResource Hint}" Margin="0,14,0,0"/>
+                        </RadioButton>
+                        <Border Style="{StaticResource MouseCard}">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,7">
+                                    <Button DockPanel.Dock="Right" Command="{Binding NewProfileCommand}" Style="{StaticResource Ghost}"
+                                            Content="{l:T profile_new}" Padding="6,4" MinHeight="24" FontSize="10.5" ToolTip="{l:T profile_new_hint}"/>
+                                    <TextBlock Text="{l:T tab_profiles}" Style="{StaticResource H2}" Margin="0" VerticalAlignment="Center"/>
+                                </DockPanel>
+                                <Border CornerRadius="7" Padding="8,6" Margin="0,0,0,8">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{StaticResource Surface2}"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasSelectedSavedProfile}" Value="True">
+                                                    <Setter Property="Background" Value="{StaticResource AccentDim}"/>
+                                                    <Setter Property="BorderBrush" Value="{StaticResource AccentSoft}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Text="{Binding ProfileEditorStatus}" FontSize="10.5" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                </Border>
+                                <TextBox Text="{Binding NewProfileName, UpdateSourceTrigger=PropertyChanged}" MinHeight="30" FontSize="11"
+                                         Padding="8,6" Margin="0,0,0,7" ToolTip="{l:T profile_name_hint}"
+                                         AutomationProperties.Name="{l:T name}"/>
+                                <Button Command="{Binding SaveProfileCommand}" Content="{l:T profile_save}" Style="{StaticResource Primary}"
+                                        FontSize="11" Padding="8,7" MinHeight="30" Margin="0,0,0,7"/>
+                                <Button Command="{Binding ImportProfileCommand}" Content="{l:T profile_import}" Style="{StaticResource MouseSmallButton}"
+                                        HorizontalContentAlignment="Center" Margin="0,0,0,7"/>
+                                <TextBlock Text="{l:T profile_inline_save_hint}" Style="{StaticResource Hint}" FontSize="10" Margin="0,0,0,9"/>
+                                <TextBlock Text="{l:T profiles_empty}" Style="{StaticResource Hint}" FontSize="10.5"
+                                           Visibility="{Binding SavedProfiles.Count, Converter={StaticResource VisIfNot}}"/>
+                                <ScrollViewer MaxHeight="114" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl ItemsSource="{Binding SavedProfiles}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Padding="7,6" Margin="0,0,0,3" MinHeight="29" HorizontalContentAlignment="Stretch"
+                                                        Command="{Binding DataContext.LoadProfileCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}" ToolTip="{l:T profile_load}">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource Ghost}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                    <Setter Property="Background" Value="{StaticResource AccentDim}"/>
+                                                                    <Setter Property="BorderBrush" Value="{StaticResource AccentSoft}"/>
+                                                                    <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Right" Text="&#xE73E;" Style="{StaticResource Icon}" FontSize="10"
+                                                                   Foreground="{StaticResource Accent}" Margin="6,0,0,0"
+                                                                   Visibility="{Binding IsSelected, Converter={StaticResource VisIf}}"/>
+                                                        <TextBlock Text="{Binding Name}" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+                                                    </DockPanel>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                                <RadioButton Style="{StaticResource MouseNavigation}" Margin="0,8,0,0" Padding="8,6" MinHeight="28"
+                                             IsChecked="{Binding IsSelected, ElementName=SavedTab, Mode=TwoWay}" ToolTip="{l:T mouse_profile_hint}">
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Right" Text="&#xE72A;" Style="{StaticResource Icon}" Foreground="{StaticResource Muted}" FontSize="11" Margin="6,0,0,0"/>
+                                        <TextBlock Text="{l:T tab_backup}" FontSize="10.5"/>
+                                    </DockPanel>
+                                </RadioButton>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource MouseCard}">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,9">
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding BatteryText}" FontSize="15" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{l:T battery}" Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center"/>
+                                </DockPanel>
+                                <ProgressBar Minimum="0" Maximum="100" Value="{Binding Battery, Mode=OneWay, TargetNullValue=0}" Height="4"
+                                             Foreground="{StaticResource Accent}" Background="{StaticResource Surface3}" BorderThickness="0"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-                </Border>
-            </ScrollViewer>
-        </TabItem>
 
-        <!-- ============================== POWER ============================== -->
-        <TabItem Header="{l:T tab_power}">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,16">
-                <Border Style="{StaticResource Card}">
-                    <StackPanel>
-                        <TextBlock Text="{l:T power_title}" Style="{StaticResource H2}"/>
-                        <TextBlock Text="{l:T sleep}" Style="{StaticResource Label}" Margin="0,12,0,0"/>
-                        <TextBlock Text="{l:T sleep_hint}" Style="{StaticResource Hint}"/>
-                        <DockPanel Margin="0,6,0,0">
-                            <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding SleepMinutes, StringFormat={}{0:0.0} min}"/>
-                            <Slider Minimum="0.5" Maximum="30" TickFrequency="0.5" IsSnapToTickEnabled="True" Value="{Binding SleepMinutes}"/>
-                        </DockPanel>
-                        <TextBlock Text="{l:T deep_sleep}" Style="{StaticResource Label}" Margin="0,18,0,0"/>
-                        <TextBlock Text="{l:T deep_sleep_hint}" Style="{StaticResource Hint}"/>
-                        <DockPanel Margin="0,6,0,0">
-                            <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding DeepSleepMinutes, StringFormat={}{0} min}"/>
-                            <Slider Minimum="1" Maximum="60" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding DeepSleepMinutes}"/>
-                        </DockPanel>
+                    <!-- Numbered, keyboard-accessible hotspots are drawn in the control. -->
+                    <Border Grid.Column="2" CornerRadius="18" BorderThickness="1" BorderBrush="{StaticResource Border}"
+                            VerticalAlignment="Top" MinHeight="530" Padding="10,20,10,18">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#21181E" Offset="0"/><GradientStop Color="#151215" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="430"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="{Binding NavigationTitle}" FontSize="26" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding LinkText}" Foreground="{StaticResource Muted}" FontSize="10.5" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <c:X11MouseIllustration Grid.Row="1" Command="{Binding EditShortcutCommand}" Margin="0,6,0,0"/>
+                            <StackPanel Grid.Row="2" Margin="7,8,7,0">
+                                <TextBlock Text="{l:T mouse_visual_hint}" Style="{StaticResource Hint}" TextAlignment="Center" FontSize="10.5"/>
+                                <TextBlock Text="A  &#xB7;  F5  &#xB7;  Ctrl + A" Foreground="{StaticResource Accent}" FontSize="10.5" TextAlignment="Center" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Eight DPI stages and expandable settings. -->
+                    <StackPanel Grid.Column="4">
+                        <Border Style="{StaticResource MouseCard}" Padding="12,14">
+                            <StackPanel>
+                                <DockPanel Margin="2,0,2,12">
+                                    <TextBlock DockPanel.Dock="Right" Text="50 - 22 000" FontSize="10" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{l:T dpi_title}" Style="{StaticResource H2}" Margin="0" ToolTip="{l:T dpi_hint}"/>
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding Stages}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="8"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:StageVm}">
+                                            <Border Margin="1,0" Padding="1,7" CornerRadius="9" ToolTip="{Binding Name}">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="{StaticResource Surface2}"/>
+                                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                                        <Setter Property="BorderThickness" Value="1"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                <Setter Property="Background" Value="{StaticResource AccentDim}"/>
+                                                                <Setter Property="BorderBrush" Value="{StaticResource AccentSoft}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Number}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Muted}"
+                                                               HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                                    <Slider Style="{StaticResource VerticalDpi}" Minimum="50" Maximum="22000" SmallChange="50" LargeChange="400"
+                                                            Value="{Binding Dpi, Delay=150}" IsEnabled="{Binding Enabled}" Height="136" HorizontalAlignment="Center"/>
+                                                    <TextBox Text="{Binding Dpi, UpdateSourceTrigger=LostFocus}" IsEnabled="{Binding Enabled}"
+                                                             FontSize="9.5" Width="32" MinHeight="27" Padding="0,5" TextAlignment="Center" Margin="0,8,0,8" ToolTip="{Binding Dpi}"/>
+                                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,7">
+                                                        <CheckBox IsChecked="{Binding Enabled}" ToolTip="{Binding Name}">
+                                                            <CheckBox.LayoutTransform><ScaleTransform ScaleX="0.65" ScaleY="0.65"/></CheckBox.LayoutTransform>
+                                                        </CheckBox>
+                                                        <RadioButton Style="{StaticResource Dot}" IsChecked="{Binding IsActive, Mode=TwoWay}" IsEnabled="{Binding Enabled}"
+                                                                     GroupName="x11stage" ToolTip="{l:T dpi_active}" VerticalAlignment="Center">
+                                                            <RadioButton.LayoutTransform><ScaleTransform ScaleX="0.7" ScaleY="0.7"/></RadioButton.LayoutTransform>
+                                                        </RadioButton>
+                                                    </StackPanel>
+                                                    <c:ColorButton Color="{Binding Color}" HorizontalAlignment="Center" IsEnabled="{Binding Enabled}" Padding="2" MinHeight="24"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="{l:T dpi_hint}" Style="{StaticResource Hint}" FontSize="10" Margin="3,11,3,0"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="{l:T mouse_settings}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource Muted}" Margin="3,1,0,10"/>
+
+                        <Expander Header="{l:T polling_title}" Style="{StaticResource MouseSection}">
+                            <StackPanel>
+                                <TextBlock Text="{l:T polling_hint}" Style="{StaticResource Hint}" FontSize="11" Margin="0,0,0,10"/>
+                                <WrapPanel>
+                                    <RadioButton Style="{StaticResource Segment}" Content="125 Hz" Padding="8,7" FontSize="11" IsChecked="{Binding PollingHz, Converter={StaticResource Eq}, ConverterParameter=125}"/>
+                                    <RadioButton Style="{StaticResource Segment}" Content="250 Hz" Padding="8,7" FontSize="11" IsChecked="{Binding PollingHz, Converter={StaticResource Eq}, ConverterParameter=250}"/>
+                                    <RadioButton Style="{StaticResource Segment}" Content="500 Hz" Padding="8,7" FontSize="11" IsChecked="{Binding PollingHz, Converter={StaticResource Eq}, ConverterParameter=500}"/>
+                                    <RadioButton Style="{StaticResource Segment}" Content="1000 Hz" Padding="8,7" FontSize="11" IsChecked="{Binding PollingHz, Converter={StaticResource Eq}, ConverterParameter=1000}"/>
+                                </WrapPanel>
+                                <TextBlock Text="{l:T polling_wired_note}" Style="{StaticResource Hint}" FontSize="11" Margin="0,9,0,0"
+                                           Visibility="{Binding IsWired, Converter={StaticResource VisIf}}"/>
+                            </StackPanel>
+                        </Expander>
+                        <Expander Header="{l:T light_title}" Style="{StaticResource MouseSection}">
+                            <StackPanel>
+                                <TextBlock Text="{l:T light_mode}" Style="{StaticResource Label}" FontSize="11" Margin="0,0,0,7"/>
+                                <ItemsControl ItemsSource="{Binding LightModes}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <RadioButton Style="{StaticResource Segment}" Content="{Binding Label}" Margin="0,0,5,6"
+                                                         FontSize="11" Padding="9,7" GroupName="x11light"
+                                                         Command="{Binding DataContext.SetLightModeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                         CommandParameter="{Binding Value}">
+                                                <RadioButton.IsChecked>
+                                                    <MultiBinding Mode="OneWay" Converter="{x:Static v:MultiEquals.Instance}">
+                                                        <Binding Path="Value"/>
+                                                        <Binding Path="DataContext.LightMode" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                                    </MultiBinding>
+                                                </RadioButton.IsChecked>
+                                            </RadioButton>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <DockPanel Visibility="{Binding LightUsesColor, Converter={StaticResource VisIf}}" Margin="0,9,0,0">
+                                    <c:ColorButton DockPanel.Dock="Right" Color="{Binding LightColor}" ToolTip="{l:T light_color_hint}"/>
+                                    <TextBlock Text="{l:T light_color}" Style="{StaticResource Label}" FontSize="11"/>
+                                </DockPanel>
+                                <StackPanel Visibility="{Binding LightUsesBrightness, Converter={StaticResource VisIf}}" Margin="0,12,0,0">
+                                    <TextBlock Text="{l:T brightness}" Style="{StaticResource Label}" FontSize="11"/>
+                                    <DockPanel Margin="0,6,0,0">
+                                        <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding Brightness, StringFormat={}{0} / 8}"/>
+                                        <Slider Minimum="1" Maximum="8" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Brightness}"/>
+                                    </DockPanel>
+                                    <TextBlock Text="{l:T brightness_hint}" Style="{StaticResource Hint}" FontSize="10.5" Margin="0,3,0,0"/>
+                                </StackPanel>
+                                <StackPanel Visibility="{Binding LightUsesSpeed, Converter={StaticResource VisIf}}" Margin="0,12,0,0">
+                                    <TextBlock Text="{l:T speed}" Style="{StaticResource Label}" FontSize="11"/>
+                                    <DockPanel Margin="0,6,0,0">
+                                        <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding Speed, StringFormat={}{0} / 8}"/>
+                                        <Slider Minimum="1" Maximum="8" IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Speed}"/>
+                                    </DockPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </Expander>
+                        <Expander Header="{l:T sensor_title}" Style="{StaticResource MouseSection}">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,10">
+                                    <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding AngleSnap}" Margin="9,0,0,0"/>
+                                    <TextBlock Text="{l:T angle_snap}" Style="{StaticResource Label}" FontSize="11" TextWrapping="Wrap" ToolTip="{l:T angle_snap_hint}"/>
+                                </DockPanel>
+                                <DockPanel>
+                                    <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding Ripple}" Margin="9,0,0,0"/>
+                                    <TextBlock Text="{l:T ripple}" Style="{StaticResource Label}" FontSize="11" TextWrapping="Wrap" ToolTip="{l:T ripple_hint}"/>
+                                </DockPanel>
+                                <TextBlock Text="{l:T debounce}" Style="{StaticResource Label}" FontSize="11" TextWrapping="Wrap" Margin="0,16,0,0"/>
+                                <TextBlock Text="{l:T debounce_hint}" Style="{StaticResource Hint}" FontSize="10.5" Margin="0,3,0,6"/>
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding DebounceMs, StringFormat={}{0} ms}"/>
+                                    <Slider Minimum="4" Maximum="50" TickFrequency="2" IsSnapToTickEnabled="True" Value="{Binding DebounceMs}"/>
+                                </DockPanel>
+                            </StackPanel>
+                        </Expander>
+                        <Expander Header="{l:T power_title}" Style="{StaticResource MouseSection}">
+                            <StackPanel>
+                                <TextBlock Text="{l:T sleep}" Style="{StaticResource Label}" FontSize="11" TextWrapping="Wrap"/>
+                                <TextBlock Text="{l:T sleep_hint}" Style="{StaticResource Hint}" FontSize="10.5" Margin="0,3,0,6"/>
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding SleepMinutes, StringFormat={}{0:0.0} min}"/>
+                                    <Slider Minimum="0.5" Maximum="30" TickFrequency="0.5" IsSnapToTickEnabled="True" Value="{Binding SleepMinutes}"/>
+                                </DockPanel>
+                                <TextBlock Text="{l:T deep_sleep}" Style="{StaticResource Label}" FontSize="11" TextWrapping="Wrap" Margin="0,16,0,0"/>
+                                <TextBlock Text="{l:T deep_sleep_hint}" Style="{StaticResource Hint}" FontSize="10.5" Margin="0,3,0,6"/>
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Value}" Text="{Binding DeepSleepMinutes, StringFormat={}{0} min}"/>
+                                    <Slider Minimum="1" Maximum="60" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding DeepSleepMinutes}"/>
+                                </DockPanel>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
-                </Border>
+                </Grid>
             </ScrollViewer>
         </TabItem>
 
         <!-- ============================== MACROS ============================== -->
-        <TabItem Header="{l:T tab_macros}">
+        <TabItem x:Name="MacrosTab" Header="{l:T tab_macros}">
             <Grid Margin="0,0,0,16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="240"/>
@@ -299,7 +552,7 @@
         </TabItem>
 
         <!-- ============================== BACKUP ============================== -->
-        <TabItem Header="{l:T tab_backup}">
+        <TabItem x:Name="SavedTab" Header="{l:T tab_backup}">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,16">
                 <v:BackupPanel/>
             </ScrollViewer>

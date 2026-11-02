@@ -4,6 +4,10 @@ internal static partial class Strings
 {
     private static Dictionary<string, string> MousePt => new()
     {
+        ["mouse_overview"] = "Principal",
+        ["mouse_visual_hint"] = "Clique em um botão do mouse para escolher uma tecla ou combinação.",
+        ["mouse_settings"] = "Ajustes do mouse",
+        ["mouse_profile_hint"] = "Seus perfis ficam salvos neste PC.",
         ["dpi_title"] = "Estágios de DPI",
         ["dpi_hint"] = "Ative até 8 estágios. O botão de DPI do mouse alterna entre os ativos. Clique no círculo para escolher o estágio em uso.",
         ["dpi_stage"] = "Estágio {0}",
@@ -28,8 +32,18 @@ internal static partial class Strings
         ["btn_backward"] = "Lateral traseiro (voltar)",
         ["btn_dpi"] = "Botão de DPI",
         ["custom_shortcut"] = "Atalho personalizado…",
+        ["shortcut_edit"] = "Tecla / atalho…",
+        ["shortcut_title"] = "Selecionar tecla ou combinação",
+        ["shortcut_hint"] = "Escolha uma tecla e, se quiser, combine com Ctrl, Shift, Alt ou Win. Ex.: A, F5 ou Ctrl + A.",
+        ["shortcut_key"] = "Tecla",
+        ["shortcut_no_key"] = "Sem tecla (somente Ctrl, Shift, Alt ou Win)",
+        ["shortcut_modifiers"] = "Combinar com (opcional)",
+        ["shortcut_empty"] = "Selecione uma tecla ou modificador",
+        ["shortcut_capture_start"] = "Capturar pelo teclado",
+        ["shortcut_capture_stop"] = "Parar captura",
+        ["shortcut_apply_hint"] = "Confirmar altera apenas a seleção. Para gravar no mouse, use Aplicar no dispositivo.",
         ["assign_macro"] = "Macro…",
-        ["shortcut_capture"] = "Pressione a combinação de teclas",
+        ["shortcut_capture"] = "Pressione uma tecla ou combinação…",
         ["buttons_reset"] = "Voltar botões ao padrão",
 
         ["grp_Mouse"] = "Mouse",
@@ -141,6 +155,10 @@ internal static partial class Strings
 
     private static Dictionary<string, string> MouseEn => new()
     {
+        ["mouse_overview"] = "Overview",
+        ["mouse_visual_hint"] = "Click a mouse button to choose a key or combination.",
+        ["mouse_settings"] = "Mouse settings",
+        ["mouse_profile_hint"] = "Your profiles are saved on this PC.",
         ["dpi_title"] = "DPI stages",
         ["dpi_hint"] = "Enable up to 8 stages. The mouse's DPI button cycles through the enabled ones. Click the circle to pick the stage in use.",
         ["dpi_stage"] = "Stage {0}",
@@ -165,8 +183,18 @@ internal static partial class Strings
         ["btn_backward"] = "Rear side (back)",
         ["btn_dpi"] = "DPI button",
         ["custom_shortcut"] = "Custom shortcut…",
+        ["shortcut_edit"] = "Key / shortcut…",
+        ["shortcut_title"] = "Select a key or combination",
+        ["shortcut_hint"] = "Choose a key and optionally combine it with Ctrl, Shift, Alt or Win. E.g. A, F5 or Ctrl + A.",
+        ["shortcut_key"] = "Key",
+        ["shortcut_no_key"] = "No key (Ctrl, Shift, Alt or Win only)",
+        ["shortcut_modifiers"] = "Combine with (optional)",
+        ["shortcut_empty"] = "Select a key or modifier",
+        ["shortcut_capture_start"] = "Capture from keyboard",
+        ["shortcut_capture_stop"] = "Stop capture",
+        ["shortcut_apply_hint"] = "Confirm only updates the selection. To save it to the mouse, use Apply to device.",
         ["assign_macro"] = "Macro…",
-        ["shortcut_capture"] = "Press the key combination",
+        ["shortcut_capture"] = "Press a key or combination…",
         ["buttons_reset"] = "Reset buttons to default",
 
         ["grp_Mouse"] = "Mouse",

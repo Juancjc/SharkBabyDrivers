@@ -4,6 +4,7 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
@@ -18,10 +19,12 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="System.IO" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SharkBabyDrivers.Core\SharkBabyDrivers.Core.csproj" />
+    <ProjectReference Include="..\..\src\SharkBabyDrivers\SharkBabyDrivers.csproj" />
   </ItemGroup>
 
 </Project>

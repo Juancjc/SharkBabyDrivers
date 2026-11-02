@@ -19,11 +19,13 @@ public sealed class BackupItemVm(BackupEntry entry)
     public string Summary => Entry.Snapshot.Notes.GetValueOrDefault("summary") ?? Entry.Snapshot.Firmware;
 }
 
-public sealed class SavedProfileVm(SavedProfile profile)
+public sealed class SavedProfileVm(SavedProfile profile) : ObservableObject
 {
+    private bool _isSelected;
     public SavedProfile Profile { get; } = profile;
     public string Name => Profile.Name;
     public string When => Profile.SavedAt.ToString("g");
+    public bool IsSelected { get => _isSelected; internal set => Set(ref _isSelected, value); }
 }
 
 /// <summary>
@@ -45,6 +47,23 @@ public abstract class DeviceVm : ObservableObject, IDisposable
     public ObservableCollection<SavedProfileVm> SavedProfiles { get; } = new();
     private string _newProfileName = "";
     public string NewProfileName { get => _newProfileName; set => Set(ref _newProfileName, value); }
+    private SavedProfileVm? _selectedSavedProfile;
+    public SavedProfileVm? SelectedSavedProfile
+    {
+        get => _selectedSavedProfile;
+        private set
+        {
+            if (ReferenceEquals(_selectedSavedProfile, value)) return;
+            if (_selectedSavedProfile is { } previous) previous.IsSelected = false;
+            Set(ref _selectedSavedProfile, value);
+            if (value is not null) value.IsSelected = true;
+            OnPropertyChanged(nameof(HasSelectedSavedProfile));
+            OnPropertyChanged(nameof(ProfileEditorStatus));
+        }
+    }
+    public bool HasSelectedSavedProfile => SelectedSavedProfile is not null;
+    public string ProfileEditorStatus => SelectedSavedProfile is { } selected
+        ? Loc.F("profile_editing", selected.Name) : Loc.T("profile_draft");
 
     protected DeviceVm(ISharkDevice device)
     {
@@ -54,7 +73,8 @@ public abstract class DeviceVm : ObservableObject, IDisposable
         RetryCommand = new AsyncCommand(InitializeAsync, () => !Busy);
         RestoreCommand = new AsyncCommand(p => RestoreAsync(((BackupItemVm)p!).Entry.Snapshot), p => p is BackupItemVm && CanWrite);
         ExportBackupCommand = new RelayCommand(p => ExportBackup((BackupItemVm)p!), p => p is BackupItemVm);
-        SaveProfileCommand = new RelayCommand(SaveProfile, () => IsReady);
+        SaveProfileCommand = new RelayCommand(SaveProfile, () => IsReady && !Busy);
+        NewProfileCommand = new RelayCommand(NewProfile, () => IsReady && !Busy);
         LoadProfileCommand = new RelayCommand(p => LoadSavedProfile((SavedProfileVm)p!), p => p is SavedProfileVm && IsReady && !Busy);
         DeleteProfileCommand = new RelayCommand(p => DeleteProfile((SavedProfileVm)p!), p => p is SavedProfileVm);
         ExportProfileCommand = new RelayCommand(ExportProfile, () => IsReady);
@@ -107,6 +127,7 @@ public abstract class DeviceVm : ObservableObject, IDisposable
     public AsyncCommand RestoreCommand { get; }
     public RelayCommand ExportBackupCommand { get; }
     public RelayCommand SaveProfileCommand { get; }
+    public RelayCommand NewProfileCommand { get; }
     public RelayCommand LoadProfileCommand { get; }
     public RelayCommand DeleteProfileCommand { get; }
     public RelayCommand ExportProfileCommand { get; }
@@ -142,6 +163,7 @@ public abstract class DeviceVm : ObservableObject, IDisposable
             Annotate(snapshot);
             var saved = Backups.SaveOriginal(snapshot);
             LoadFromSnapshot(snapshot);
+            NewProfile();
             RefreshBackups();
             RefreshProfiles();
             OnPropertyChanged(nameof(HasBackup));
@@ -191,8 +213,24 @@ public abstract class DeviceVm : ObservableObject, IDisposable
 
     protected void RefreshProfiles()
     {
+        var selectedPath = SelectedSavedProfile?.Profile.Path;
         SavedProfiles.Clear();
         foreach (var p in ProfileLibrary.List(Device.Model)) SavedProfiles.Add(new SavedProfileVm(p));
+        SelectSavedProfile(selectedPath, updateName: false);
+    }
+
+    private void SelectSavedProfile(string? path, bool updateName = true)
+    {
+        SelectedSavedProfile = path is null ? null : SavedProfiles.FirstOrDefault(p =>
+            string.Equals(p.Profile.Path, path, StringComparison.OrdinalIgnoreCase));
+        if (updateName) NewProfileName = SelectedSavedProfile?.Name ?? "";
+    }
+
+    /// <summary>Starts a new named copy of the current editor settings without changing those settings.</summary>
+    private void NewProfile()
+    {
+        SelectedSavedProfile = null;
+        NewProfileName = "";
     }
 
     private void SaveProfile()
@@ -202,14 +240,15 @@ public abstract class DeviceVm : ObservableObject, IDisposable
             name = Enumerable.Range(1, 999).Select(i => Loc.F("profile_default_name", i)).First(n => !ProfileLibrary.Exists(Device.Model, n));
         if (ProfileLibrary.Exists(Device.Model, name) && !App.Confirm(Loc.F("profile_overwrite_confirm", name))) return;
         ProfileLibrary.Save(Device.Model, name, CaptureProfile());
-        NewProfileName = "";
         RefreshProfiles();
+        SelectSavedProfile(ProfileLibrary.PathFor(Device.Model, name));
         ShowToast(Loc.F("profile_saved", name));
     }
 
     private void LoadSavedProfile(SavedProfileVm item)
     {
         LoadProfileFile(item.Profile.Path);
+        SelectSavedProfile(item.Profile.Path);
         MarkDirty();
         ShowToast(Loc.F("profile_loaded", item.Name));
     }
@@ -217,8 +256,10 @@ public abstract class DeviceVm : ObservableObject, IDisposable
     private void DeleteProfile(SavedProfileVm item)
     {
         if (!App.Confirm(Loc.F("profile_delete_confirm", item.Name))) return;
+        var wasSelected = string.Equals(SelectedSavedProfile?.Profile.Path, item.Profile.Path, StringComparison.OrdinalIgnoreCase);
         ProfileLibrary.Delete(item.Profile);
         RefreshProfiles();
+        if (wasSelected) NewProfile();
     }
 
     private void ExportProfile()
@@ -237,8 +278,17 @@ public abstract class DeviceVm : ObservableObject, IDisposable
         name = name.EndsWith(ProfileLibrary.Extension, StringComparison.OrdinalIgnoreCase)
             ? name[..^ProfileLibrary.Extension.Length]
             : Path.GetFileNameWithoutExtension(name);
-        if (!ProfileLibrary.Exists(Device.Model, name)) ProfileLibrary.Save(Device.Model, name, CaptureProfile());
+        // Preserve both the existing library entry and the imported settings when names collide.
+        var importedPath = Path.GetFullPath(dlg.FileName);
+        var libraryPath = Path.GetFullPath(ProfileLibrary.PathFor(Device.Model, name));
+        if (!string.Equals(importedPath, libraryPath, StringComparison.OrdinalIgnoreCase))
+        {
+            var baseName = name;
+            for (var suffix = 2; ProfileLibrary.Exists(Device.Model, name); suffix++) name = $"{baseName} ({suffix})";
+            ProfileLibrary.Save(Device.Model, name, CaptureProfile());
+        }
         RefreshProfiles();
+        SelectSavedProfile(ProfileLibrary.PathFor(Device.Model, name));
         MarkDirty();
         ShowToast(Loc.T("profile_imported"));
     }
@@ -293,6 +343,7 @@ public abstract class DeviceVm : ObservableObject, IDisposable
     private void Discard()
     {
         DiscardChanges();
+        NewProfile();
         IsDirty = false;
     }
 
@@ -315,6 +366,7 @@ public abstract class DeviceVm : ObservableObject, IDisposable
         OnPropertyChanged(nameof(KindText));
         OnPropertyChanged(nameof(LinkText));
         OnPropertyChanged(nameof(WakeHint));
+        OnPropertyChanged(nameof(ProfileEditorStatus));
     }
 
     public virtual void Dispose()
