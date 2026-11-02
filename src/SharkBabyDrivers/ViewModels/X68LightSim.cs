@@ -30,10 +30,10 @@ public sealed record X68LightState(X68LightMode Mode, int Option, int Speed, int
     public static readonly X68LightState Off = new(X68LightMode.Off, 0, 0, 0, 0, false, null);
 
     /// <param name="device">The keyboard's stored lighting (not pending edits).</param>
-    /// <param name="signalColor">While SignalRGB owns the lighting the keyboard shows one streamed colour on every key.</param>
+    /// <param name="signalColor">In the screen-colour mode the keyboard shows one streamed colour on every key.</param>
     public static X68LightState From(X68Image device, bool signalRgbOwns, (byte R, byte G, byte B)? signalColor, bool lightsDark)
     {
-        if (signalRgbOwns || device.LightMode == X68LightMode.ScreenColor)
+        if (device.LightMode == X68LightMode.ScreenColor)
             return signalColor is { } c && !lightsDark
                 ? new(X68LightMode.AlwaysOn, 0, 0, X68Lighting.MaxBrightness, (uint)(c.R << 16 | c.G << 8 | c.B), false, null)
                 : Off;

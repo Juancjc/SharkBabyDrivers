@@ -98,6 +98,34 @@ switch (command)
         return 0;
     }
 
+    case "scene-replay":
+    {
+        // Replays per-key snapshots recorded by the app (SBD_SCENE_RECORD) through the SignalRGB scene analysis:
+        // scene-replay <file> [fromMs toMs] prints each change of the decided look and a summary (no device access).
+        var frames = SharkBabyDrivers.Core.Lighting.SceneRecording.Load(args[1]).ToList();
+        if (args.Length >= 4)
+        {
+            var from = long.Parse(args[2]);
+            var to = long.Parse(args[3]);
+            frames = frames.Where(f => f.ReceivedAt >= from && f.ReceivedAt <= to).ToList();
+        }
+        var decisions = SharkBabyDrivers.Core.Lighting.SceneRecording.Replay(frames);
+        string? last = null;
+        foreach (var (t, look, detail) in decisions)
+        {
+            var sig = look?.ToString() ?? "(none)";
+            if (sig == last) continue;
+            last = sig;
+            Console.WriteLine($"{t} {sig}  [{detail}]");
+        }
+        foreach (var g in decisions.GroupBy(d => d.Look?.ToString() ?? "(none)").OrderByDescending(g => g.Count()))
+            Console.WriteLine($"  {g.Count() * 100 / Math.Max(1, decisions.Count),3}%  {g.Key}");
+        // Effect, direction and rainbow only: what decides a write soon (speed / brightness / colour are details).
+        foreach (var g in decisions.Where(d => d.Look is not null).GroupBy(d => d.Look!.Kind).OrderByDescending(g => g.Count()))
+            Console.WriteLine($"  kind {g.Count() * 100 / Math.Max(1, decisions.Count),3}%  {g.Key}");
+        return 0;
+    }
+
     case "signalrgb-layout":
         // Prints the key table of the SignalRGB plugin (no device access).
         Console.WriteLine(SharkBabyDrivers.Core.Lighting.SignalRgbKeyMap.ToJavaScript());

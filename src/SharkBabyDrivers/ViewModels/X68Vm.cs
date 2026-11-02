@@ -183,6 +183,13 @@ public sealed class X68Vm : DeviceVm
     }
 
     public bool LightingByApp { get => !LightingBySignalRgb; set => LightingBySignalRgb = !value; }
+    /// <summary>With SignalRGB in control: imitate it with the keyboard's own effects (or one live colour only).</summary>
+    public bool SignalRgbEffects
+    {
+        get => _lighting.EffectsStyle;
+        set { if (!App.IsPreview) _lighting.SetEffectsStyle(value); OnLightingChanged(); }
+    }
+    public bool SignalRgbLiveOnly { get => !SignalRgbEffects; set => SignalRgbEffects = !value; }
     /// <summary>The effect editor is usable only while the app owns the lighting.</summary>
     public bool LightingEditable => !LightingBySignalRgb;
     public string LightingStatusText => _lighting.Describe();
@@ -215,6 +222,8 @@ public sealed class X68Vm : DeviceVm
         OnPropertyChanged(nameof(LightingByApp));
         OnPropertyChanged(nameof(LightingEditable));
         OnPropertyChanged(nameof(LightingStatusText));
+        OnPropertyChanged(nameof(SignalRgbEffects));
+        OnPropertyChanged(nameof(SignalRgbLiveOnly));
         OnPropertyChanged(nameof(SignalRgbPluginState));
         OnPropertyChanged(nameof(SignalRgbPluginText));
         OnPropertyChanged(nameof(CaptureStatusText));

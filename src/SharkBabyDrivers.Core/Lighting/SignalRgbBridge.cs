@@ -7,8 +7,8 @@ namespace SharkBabyDrivers.Core.Lighting;
 public sealed record RgbFrame(ushort ProductId, byte R, byte G, byte B, bool Shutdown, long ReceivedAt);
 
 /// <summary>
-/// The colour of every key as SignalRGB draws it (matrix slot → RGB). The firmware cannot show this live; it is only
-/// used to store a static picture on request.
+/// The colour of every key as SignalRGB draws it (matrix slot → RGB). The firmware cannot show this live; it is used
+/// to pick the keyboard's own effect that looks most like the scene, and to store a static picture on request.
 /// </summary>
 public sealed record KeyColorsFrame(ushort ProductId, IReadOnlyDictionary<int, (byte R, byte G, byte B)> Keys, long ReceivedAt);
 
@@ -36,6 +36,8 @@ public sealed class SignalRgbBridge : IDisposable
     public string? Error { get; private set; }
     public bool Listening => _udp is not null;
     public event Action<RgbFrame>? FrameReceived;
+    /// <summary>Raised on the receive thread for every per-key snapshot.</summary>
+    public event Action<KeyColorsFrame>? KeysReceived;
 
     public void Start()
     {
@@ -98,7 +100,9 @@ public sealed class SignalRgbBridge : IDisposable
 
     public void AcceptKeys(KeyColorsFrame frame)
     {
+        Interlocked.Increment(ref _keyFrames);
         lock (_lock) _latestKeys[frame.ProductId] = frame;
+        KeysReceived?.Invoke(frame);
     }
 
     /// <summary>The newest per-key snapshot for this connection (or any connection), if recent enough.</summary>
@@ -110,6 +114,10 @@ public sealed class SignalRgbBridge : IDisposable
             return _latestKeys.Values.Where(f => now - f.ReceivedAt <= maxAgeMs).MaxBy(f => f.ReceivedAt);
         }
     }
+
+    /// <summary>Per-key snapshots accepted since start (diagnostics).</summary>
+    public long KeyFramesReceived => Interlocked.Read(ref _keyFrames);
+    private long _keyFrames;
 
     /// <summary>Frames accepted since start (diagnostics).</summary>
     public long FramesReceived => Interlocked.Read(ref _frames);

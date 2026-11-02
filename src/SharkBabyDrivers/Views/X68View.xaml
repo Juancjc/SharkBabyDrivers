@@ -358,6 +358,14 @@
                         </StackPanel>
                         <TextBlock Text="{Binding LightingStatusText}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,6"/>
                         <TextBlock Text="{l:T light_owner_hint}" Style="{StaticResource Hint}" Margin="0,0,0,10"/>
+                        <StackPanel Visibility="{Binding LightingBySignalRgb, Converter={StaticResource VisIf}}" Margin="0,0,0,12">
+                            <TextBlock Text="{l:T signal_style_title}" Style="{StaticResource Label}" Margin="0,0,0,6"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <RadioButton Style="{StaticResource Segment}" GroupName="signalstyle" Content="{l:T signal_style_effects}" IsChecked="{Binding SignalRgbEffects}"/>
+                                <RadioButton Style="{StaticResource Segment}" GroupName="signalstyle" Content="{l:T signal_style_live}" IsChecked="{Binding SignalRgbLiveOnly}"/>
+                            </StackPanel>
+                            <TextBlock Text="{l:T signal_style_hint}" Style="{StaticResource Hint}"/>
+                        </StackPanel>
                         <DockPanel>
                             <Button DockPanel.Dock="Right" Content="{l:T signal_plugin_install}" Command="{Binding InstallSignalRgbPluginCommand}"/>
                             <TextBlock Text="{Binding SignalRgbPluginText}" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,12,0"/>

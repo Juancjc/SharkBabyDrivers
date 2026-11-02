@@ -46,6 +46,13 @@ public sealed class AppSettings
     public string KeyboardLightingOwner { get; set; } = LightingOwners.App;
     /// <summary>The keyboard's own lighting (hex of the 0x87 answer) from before SignalRGB took over, restored when it hands back.</summary>
     public string? KeyboardLedBeforeSignalRgb { get; set; }
+    /// <summary>
+    /// How SignalRGB is shown while it owns the lighting: <see cref="SignalRgbStyles.Effects"/> (the keyboard's own
+    /// effects imitate SignalRGB's scene) or <see cref="SignalRgbStyles.Live"/> (one live colour only).
+    /// </summary>
+    public string KeyboardSignalRgbStyle { get; set; } = SignalRgbStyles.Effects;
+    /// <summary>True while the keyboard holds a firmware effect written to imitate SignalRGB (not the user's own).</summary>
+    public bool KeyboardSignalRgbEffectActive { get; set; }
 
     public static AppSettings Load() => JsonStore.LoadOrDefault(AppPaths.Settings, () => new AppSettings());
     public void Save() => JsonStore.Save(AppPaths.Settings, this);
@@ -55,4 +62,10 @@ public static class LightingOwners
 {
     public const string App = "app";
     public const string SignalRgb = "signalrgb";
+}
+
+public static class SignalRgbStyles
+{
+    public const string Effects = "effects";
+    public const string Live = "live";
 }

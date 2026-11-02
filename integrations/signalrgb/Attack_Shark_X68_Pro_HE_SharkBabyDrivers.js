@@ -11,14 +11,16 @@
 //
 // The stock firmware shows ONE live colour for the whole keyboard (there is no per-key live command), so the live
 // colour is reduced from the key colours (accent by default: what stands out from the background; or centre,
-// average, dominant). The per-key colours are also sent, twice a
-// second, so SharkBabyDrivers can store them once, on request, as a static picture (it never animates).
+// average, dominant). The per-key colours are also sent, ten times a second: SharkBabyDrivers reads the scene
+// from them (one colour, or colours travelling across the board...) and can switch the keyboard to its own matching
+// effect (a rainbow or single-colour wave with the same direction and speed), and can store them once, on
+// request, as a static picture.
 // SharkBabyDrivers must be running (it can stay minimised) for the colours to reach the keyboard.
 //
 // Installed by SharkBabyDrivers into Documents\WhirlwindFX\Plugins; it replaces the stock plugin for these ids.
 
 export function Name() { return "Attack Shark X68 Pro HE"; }
-export function Version() { return "1.2.0"; }
+export function Version() { return "1.3.0"; }
 export function VendorId() { return 0x3151; }
 // 0x5026 = 2.4G receiver, 0x502F = X68 PRO HE over the cable, 0x502D = X68 HE over the cable.
 export function ProductId() { return [0x5026, 0x502F, 0x502D]; }
@@ -58,7 +60,7 @@ const vKeys = [
 ];
 const vLedNames = vKeys.map(k => k[1]);
 const vLedPositions = vKeys.map(k => [k[2], k[3]]);
-const KEYS_EVERY_MS = 500;
+const KEYS_EVERY_MS = 100;
 
 export function LedNames() { return vLedNames; }
 export function LedPositions() { return vLedPositions; }

@@ -11,7 +11,9 @@ namespace SharkBabyDrivers.Services;
 /// <list type="bullet">
 /// <item><b>SignalRGB</b>: the keyboard is put in the host-driven screen-colour mode (one flash write), lighting
 /// writes of the app are locked, and SignalRGB's colours (received by <see cref="SignalRgbBridge"/>) are streamed
-/// with 0x0E between the app's own transfers.</item>
+/// with 0x0E between the app's own transfers. With the "keyboard effects" style, SignalRGB's per-key scene is read
+/// (<see cref="SignalRgbScene"/>) and, when it has several colours moving, the keyboard runs its own closest effect
+/// instead (a rainbow or single-colour wave, raindrops), written rarely (<see cref="SceneMirror"/>: flash).</item>
 /// <item><b>SharkBabyDrivers</b>: colours from SignalRGB are ignored (nothing reaches the keyboard) and the lighting
 /// the keyboard had before SignalRGB took over is written back.</item>
 /// </list>
@@ -27,11 +29,54 @@ public sealed class LightingCoordinator : IDisposable
     private X68Device? _current;
     private CancellationTokenSource? _applyCts;
     private string _state = "";
+    private readonly SignalRgbScene _scene = new();
+    private readonly SceneMirror _mirror = new();
+    private long _ownKeysAt;
+    /// <summary>Diagnostics: per-key snapshots written to the file named by SBD_SCENE_RECORD (see SceneRecording).</summary>
+    private readonly StreamWriter? _recorder = OpenRecorder();
+    /// <summary>Set by <see cref="Apply"/> when the keyboard already shows an imitating effect that is kept.</summary>
+    private SceneLook? _keptLook;
 
     public LightingCoordinator(AppSettings settings)
     {
         _settings = settings;
+        _bridge.KeysReceived += OnKeys;
         if (!App.IsPreview) _bridge.Start();
+    }
+
+    /// <summary>True when SignalRGB is shown with the keyboard's own effects (false: one live colour only).</summary>
+    public bool EffectsStyle => _settings.KeyboardSignalRgbStyle != SignalRgbStyles.Live;
+
+    public void SetEffectsStyle(bool effects)
+    {
+        var style = effects ? SignalRgbStyles.Effects : SignalRgbStyles.Live;
+        if (_settings.KeyboardSignalRgbStyle == style) return;
+        _settings.KeyboardSignalRgbStyle = style;
+        _settings.Save();
+        Restart();
+    }
+
+    /// <summary>The firmware effect currently imitating SignalRGB, or null while the live colour is shown.</summary>
+    public SceneLook? MirroredLook => _state == "signal" && _mirror.Applied is { Live: false } look ? look : null;
+
+    /// <summary>Per-key snapshots of the connection in use (or of any instance when that one is silent).</summary>
+    private void OnKeys(KeyColorsFrame frame)
+    {
+        if (_current is not { } device) return;
+        if (frame.ProductId == device.ProductId) Interlocked.Exchange(ref _ownKeysAt, frame.ReceivedAt);
+        else if (frame.ReceivedAt - Interlocked.Read(ref _ownKeysAt) < 3000) return;
+        _scene.Add(frame);
+        if (_recorder is { } rec)
+            lock (rec) rec.WriteLine(SceneRecording.Format(frame));
+    }
+
+    private static StreamWriter? OpenRecorder()
+    {
+        var path = Environment.GetEnvironmentVariable(SceneRecording.EnvironmentVariable);
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        try { return new StreamWriter(path, append: true) { AutoFlush = true }; }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
     }
 
     /// <summary>Raised (on the UI thread) when the keyboard's lighting bytes were changed by the coordinator.</summary>
@@ -133,8 +178,12 @@ public sealed class LightingCoordinator : IDisposable
                 var led = await device.RunAsync(() => Apply(device, signal), ct);
                 if (ct.IsCancellationRequested) return;
                 if (led is not null) Ui.Post(() => LedChanged?.Invoke(device, led));
-                pump.Active = signal;
+                var kept = signal ? _keptLook : null;
+                pump.Active = signal && kept is null;
+                _mirror.Reset(signal ? kept ?? SceneLook.LiveColor : null);
+                _scene.Clear();
                 SetState(signal ? "signal" : "app");
+                if (signal && EffectsStyle) await MirrorLoopAsync(device, pump, ct);
                 return;
             }
             catch (OperationCanceledException) { return; }
@@ -146,6 +195,75 @@ public sealed class LightingCoordinator : IDisposable
                 try { await Task.Delay(attempt < 3 ? 2000 : 5000, ct); } catch (OperationCanceledException) { return; }
             }
         }
+    }
+
+    /// <summary>
+    /// While SignalRGB owns the lighting with the "keyboard effects" style: reads the scene four times a second and,
+    /// when the mirror says so, switches the keyboard between the live colour and its own closest effect.
+    /// </summary>
+    private async Task MirrorLoopAsync(X68Device device, ScreenColorPump pump, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try { await Task.Delay(250, ct); } catch (OperationCanceledException) { return; }
+            var now = Environment.TickCount64;
+            // SignalRGB closing sends its shutdown colour: that needs the live colour mode.
+            var decided = _bridge.LatestFor(device.ProductId, now) is { Shutdown: true } ? SceneLook.LiveColor : _scene.Decide(now);
+            if (_mirror.Step(decided, now) is not { } look) continue;
+            try
+            {
+                var led = await device.RunAsync(() => ApplyLook(device, pump, look), ct);
+                _mirror.Written(look, Environment.TickCount64);
+                Trace($"mirror {look} ({_scene.LastDetail})");
+                Ui.Post(() => { LedChanged?.Invoke(device, led); Changed?.Invoke(); });
+            }
+            catch (OperationCanceledException) { return; }
+            catch (ObjectDisposedException) { return; }
+            catch (Exception ex)
+            {
+                if (ex is not DeviceAsleepException) App.Log(ex);
+                try { await Task.Delay(2000, ct); } catch (OperationCanceledException) { return; }
+            }
+        }
+    }
+
+    /// <summary>Runs inside the device queue: puts the keyboard in <paramref name="look"/>, confirmed by a read-back.</summary>
+    private byte[] ApplyLook(X68Device device, ScreenColorPump pump, SceneLook look)
+    {
+        var led = device.ReadLed();
+        if (look.Live)
+        {
+            var c = pump.LastSent ?? (_bridge.LatestFor(device.ProductId, Environment.TickCount64) is { } f ? (f.R, f.G, f.B) : (led[5], led[6], led[7]));
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                device.EnterScreenColorMode(led, c.Item1, c.Item2, c.Item3);
+                var after = device.ReadLed();
+                if (after[1] != (byte)X68LightMode.ScreenColor) continue;
+                SetEffectActive(false);
+                pump.Active = true;
+                return after;
+            }
+            throw new IOException("O teclado não voltou ao modo de cor ao vivo.");
+        }
+        // Inside the queue no live colour can slip in between: stop the stream, then write the effect once.
+        pump.Active = false;
+        SetEffectActive(true);
+        var bytes = look.LedBytes(led);
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            device.WriteLed(bytes);
+            var after = device.ReadLed();
+            // Every field must match (effect, direction, speed, brightness, rainbow / colour), not just the effect.
+            if (SceneLook.FromLed(after)?.Signature == look.Signature) return after;
+        }
+        throw new IOException("O teclado não confirmou o efeito.");
+    }
+
+    private void SetEffectActive(bool active)
+    {
+        if (_settings.KeyboardSignalRgbEffectActive == active) return;
+        _settings.KeyboardSignalRgbEffectActive = active;
+        _settings.Save();
     }
 
     /// <summary>Runs inside the device queue. Returns the keyboard's new lighting bytes when they changed.</summary>
@@ -160,11 +278,22 @@ public sealed class LightingCoordinator : IDisposable
         }
         var led = device.ReadLed();
         var screen = led[1] == (byte)X68LightMode.ScreenColor;
+        // An effect written to imitate SignalRGB counts as SignalRGB's lighting, not as the user's own.
+        var imitation = _settings.KeyboardSignalRgbEffectActive;
+        _keptLook = null;
         if (signal)
         {
             if (screen) return null;
+            // Reconnection (or the page re-reading the keyboard) while an imitating effect is on: keep it, the scene
+            // decides whether it still fits. Two flash writes (live colour, then the same effect again) are avoided.
+            if (imitation && EffectsStyle && SceneLook.FromLed(led) is { } kept)
+            {
+                _keptLook = kept;
+                return null;
+            }
             // Kept only when it is a plausible effect: a garbled answer must never be written back later.
-            if (LedLooksValid(led)) _settings.KeyboardLedBeforeSignalRgb = Convert.ToHexString(led);
+            if (!imitation && LedLooksValid(led)) _settings.KeyboardLedBeforeSignalRgb = Convert.ToHexString(led);
+            _settings.KeyboardSignalRgbEffectActive = false;
             _settings.Save();
             var start = _bridge.LatestFor(device.ProductId, Environment.TickCount64)
                         is { } f ? (f.R, f.G, f.B) : (led[5], led[6], led[7]);
@@ -177,7 +306,8 @@ public sealed class LightingCoordinator : IDisposable
             }
             throw new IOException("O teclado não entrou no modo de cor ao vivo.");
         }
-        if (!screen) return null;
+        if (!screen && !imitation) return null;
+        SetEffectActive(false);
         var restore = RestoreBytes(led);
         device.WriteLed(restore);
         return device.ReadLed();
@@ -235,6 +365,7 @@ public sealed class LightingCoordinator : IDisposable
         // Hand the lighting to the app first: no more streamed colours, lighting writes unlocked.
         _applyCts?.Cancel();
         _settings.KeyboardLightingOwner = LightingOwners.App;
+        _settings.KeyboardSignalRgbEffectActive = false;
         _settings.Save();
         if (_pumps.TryGetValue(device, out var pump)) pump.Active = false;
         device.LightingLocked = false;
@@ -272,9 +403,19 @@ public sealed class LightingCoordinator : IDisposable
         {
             "" => Localization.Loc.T(SignalRgbOwns ? "light_state_signal_nokb" : "light_state_app_nokb"),
             "signal" when LightsDark => Localization.Loc.T("light_state_signal_dark"),
+            "signal" when MirroredLook is { } look => Localization.Loc.F("light_state_signal_effect", LookName(look)),
             "signal" => Localization.Loc.T(Receiving ? "light_state_signal_receiving" : "light_state_signal_silent"),
             _ => Localization.Loc.T("light_state_" + _state),
         };
+    }
+
+    /// <summary>"Wave · Right · rainbow" for a firmware look.</summary>
+    public static string LookName(SceneLook look)
+    {
+        var loc = Localization.Loc.I;
+        var name = loc[$"klm_{look.Mode}"];
+        if (look.Mode is X68LightMode.Wave or X68LightMode.CircleWave) name += " · " + loc[$"klo_{look.Mode}_{look.Option}"];
+        return name + " · " + (look.Rainbow ? loc["light_now_rainbow"] : $"#{look.Color:X6}");
     }
 
     /// <summary>The connection the lighting is being driven through, for the tray menu.</summary>
@@ -296,7 +437,7 @@ public sealed class LightingCoordinator : IDisposable
             var pump = _current is { } d && _pumps.TryGetValue(d, out var p) ? p : null;
             File.AppendAllText(path, $"[{DateTime.Now:HH:mm:ss.fff}] {what} owner={_settings.KeyboardLightingOwner} link={_current?.Link.ToString() ?? "-"} " +
                 $"pid={_current?.ProductId:X4} state={_state} bridge={(_bridge.Listening ? "ok" : _bridge.Error)} frames={_bridge.FramesReceived} " +
-                $"sent={pump?.ColorsSent ?? 0} active={pump?.Active ?? false} dark={pump?.Dark ?? false} idle={pump?.IdleOffSeconds ?? 0}s last={(LastColor is { } c ? $"{c.R:X2}{c.G:X2}{c.B:X2}" : "-")}" + Environment.NewLine);
+                $"sent={pump?.ColorsSent ?? 0} active={pump?.Active ?? false} dark={pump?.Dark ?? false} idle={pump?.IdleOffSeconds ?? 0}s style={_settings.KeyboardSignalRgbStyle} look={_mirror.Applied?.ToString() ?? "-"} keyframes={_bridge.KeyFramesReceived} scene=[{_scene.LastDetail}] last={(LastColor is { } c ? $"{c.R:X2}{c.G:X2}{c.B:X2}" : "-")}" + Environment.NewLine);
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
@@ -312,6 +453,8 @@ public sealed class LightingCoordinator : IDisposable
     public void Dispose()
     {
         _applyCts?.Cancel();
+        _bridge.KeysReceived -= OnKeys;
+        _recorder?.Dispose();
         foreach (var p in _pumps.Values) p.Dispose();
         _pumps.Clear();
         _bridge.Dispose();

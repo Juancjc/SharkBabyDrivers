@@ -87,7 +87,7 @@ public sealed class X68LightNowTests
     [Fact]
     public void SignalRgb_shows_the_streamed_colour_on_every_key()
     {
-        var img = new X68Image { LightMode = X68LightMode.Wave, LightBrightness = 1 };
+        var img = new X68Image { LightMode = X68LightMode.ScreenColor, LightBrightness = 1 };
         var waiting = InPortuguese(() => X68LightNow.From(img, true, null));
         Assert.Equal("Cor da tela (SignalRGB)", waiting.Effect);
         Assert.Equal("Aguardando cores do SignalRGB", waiting.Detail);
@@ -97,6 +97,17 @@ public sealed class X68LightNowTests
         var live = X68LightState.From(img, true, (0x00, 0x80, 0xFF), lightsDark: false);
         Assert.All(X68LightSim.Frame(live, Caps, 0), c => Assert.Equal(LedColor.FromRgb(0x0080FF), c));
         Assert.All(X68LightSim.Frame(X68LightState.From(img, true, (0x00, 0x80, 0xFF), lightsDark: true), Caps, 0), c => Assert.Equal(0, c.Level));
+    }
+
+    [Fact]
+    public void An_effect_imitating_SignalRgb_is_shown_as_that_effect()
+    {
+        var img = new X68Image { LightMode = X68LightMode.Wave, LightBrightness = 4, LightSpeed = 3 };
+        img.LightRainbow = true;
+        var now = InPortuguese(() => X68LightNow.From(img, signalRgbOwns: true, signalColor: (1, 2, 3)));
+        Assert.Equal("Onda · Para a direita", now.Effect);
+        Assert.Equal("Imitando o SignalRGB · Arco-íris · Brilho 4/4 · Velocidade 3/4", now.Detail);
+        Assert.True(X68LightSim.IsAnimated(X68LightState.From(img, true, (1, 2, 3), false)));
     }
 
     [Fact]
