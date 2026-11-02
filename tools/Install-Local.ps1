@@ -10,7 +10,8 @@
     3. Replaces %LOCALAPPDATA%\Programs\SharkBabyDrivers with the new files.
     4. Updates the Start-menu shortcut, the per-user "Apps & features" entry and an uninstaller.
     5. Keeps "Start with Windows" exactly as the user left it (only re-points an existing entry).
-    6. Starts the installed app (normal window) unless -NoLaunch.
+    6. Refreshes Windows' icon cache, so the taskbar and Start menu show the current logo.
+    7. Starts the installed app (normal window) unless -NoLaunch.
 
     The app data in %LOCALAPPDATA%\SharkBabyDrivers (ORIGINAL backups, saved profiles, settings, RGB choice,
     logs) is never modified or removed. Every recursive delete is checked against the exact install path.
@@ -171,7 +172,16 @@ if ($run -and ($run.PSObject.Properties.Name -contains $AppName)) {
     Write-Step 'Iniciar com o Windows: desligado (mantido como estava)'
 }
 
-# ------------------------------------------------------------------ 6. data folder untouched, launch
+# ------------------------------------------------------------------ 6. refresh Windows' icon cache
+# Windows caches icons by file path, and the path never changes between installs: without this the taskbar,
+# Start menu and tray may keep showing an older logo.
+Write-Step 'Atualizando o cache de ícones do Windows'
+$ie4uinit = Join-Path $env:WINDIR 'System32\ie4uinit.exe'
+if (Test-Path -LiteralPath $ie4uinit) { & $ie4uinit -show }
+Add-Type -Namespace SharkBabyInstall -Name Shell -MemberDefinition '[System.Runtime.InteropServices.DllImport("shell32.dll")] public static extern void SHChangeNotify(int eventId, uint flags, System.IntPtr item1, System.IntPtr item2);'
+[SharkBabyInstall.Shell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero) # SHCNE_ASSOCCHANGED
+
+# ------------------------------------------------------------------ 7. data folder untouched, launch
 if (Test-Path -LiteralPath $DataDir) { Write-Step "Dados preservados em $DataDir" }
 if (-not $NoLaunch) {
     Write-Step 'Abrindo o SharkBabyDrivers instalado'
