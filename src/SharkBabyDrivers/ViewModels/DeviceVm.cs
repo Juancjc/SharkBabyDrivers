@@ -159,6 +159,8 @@ public abstract class DeviceVm : ObservableObject, IDisposable
         {
             var progress = new Progress<string>(s => StatusText = $"{Loc.T("reading")} ({s})");
             var snapshot = await Device.ReadSnapshotAsync(progress);
+            OnPropertyChanged(nameof(Title));
+            OnPropertyChanged(nameof(NavigationTitle));
             snapshot.AppVersion = App.Version;
             Annotate(snapshot);
             var saved = Backups.SaveOriginal(snapshot);

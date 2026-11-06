@@ -11,13 +11,23 @@
 
 # SharkBabyDrivers
 
-Um app só, leve e em português (ou inglês), para configurar o **mouse Attack Shark X11** e o
-**teclado Attack Shark X68 PRO HE** — substitui os dois programas oficiais.
+Um app só, leve e em português (ou inglês), para configurar o **mouse Attack Shark X11** e os
+**teclados Attack Shark X68 HE e X68 PRO HE**.
+
+| Modelo | Conexão | Revisões do teclado |
+|---|---|---|
+| Attack Shark X11 | Cabo USB ou receptor 2.4G | — |
+| Attack Shark X68 HE | Cabo USB (`3151:502D`) | 2270, 2472, 2902 |
+| Attack Shark X68 PRO HE | Cabo USB ou receptor 2.4G | 2370, 2901 |
+
+O X68 HE foi adicionado a partir do programa oficial de `ATTACKSHARKX68HE.zip`, incluindo as matrizes
+Normal, Fn Windows e Fn Mac de cada revisão. A integração foi validada no simulador; falta validar em um
+X68 HE físico. O suporte existente do PRO HE continua disponível.
 
 - Barra lateral com cada periférico conectado (detecta ligar/desligar na hora).
 - **Backup antes de tudo:** ao conectar, o app lê o que está salvo *dentro* do dispositivo e guarda um
   único backup **ORIGINAL** por dispositivo, sem substituí-lo nas conexões seguintes. Nada é aplicado antes disso.
-  Pelo receptor 2.4G e no X68 V2 (id 2901) também pelo cabo, o backup do teclado inclui Hall Effect somente
+  Pelo receptor 2.4G, no X68 HE e no X68 PRO HE V2 (id 2901), o backup do teclado inclui Hall Effect somente
   do perfil ativo. A leitura desse modelo usa apenas consultas, sem trocar o perfil.
 - Na aba **Salvos e backup**, salve configurações com nome, carregue, importe e exporte perfis, ou restaure e
   exporte o backup original. Os perfis salvos ficam agrupados por modelo e podem ser usados pelo cabo ou receptor.
@@ -35,14 +45,18 @@ Um app só, leve e em português (ou inglês), para configurar o **mouse Attack 
 - Iluminação (7 efeitos, cor, brilho, velocidade), sono e sono profundo
 - Macros gravadas pelo teclado, com repetição; bateria em tempo real; reset de fábrica
 
-**Teclado X68 PRO HE** (cabo USB ou receptor 2.4G, com as limitações abaixo)
+**Teclados X68 HE** (cabo USB) **e X68 PRO HE** (cabo USB ou receptor 2.4G, com as limitações abaixo)
 - 4 perfis da memória do teclado; camadas Normal, Fn Windows e Fn Mac
 - Remapeamento de qualquer tecla: tecla/combinação, mouse, mídia, energia, macro, troca de perfil
 - Hall Effect por tecla ou em grupo: acionamento, soltura, Rapid Trigger (sensibilidades), zonas mortas
   superior/inferior, tipo de switch, DKS, Mod-Tap, Toggle, Snap Tap/SOCD, calibração
 - Iluminação (19 efeitos com variações, cor/arco-íris, brilho, velocidade)
 - Polling até 8000 Hz, debounce, detecção de SO, anti-toque acidental, estabilidade do RT, troca WASD↔setas,
-  timers de sono; macros. O reset de fábrica do teclado fica desativado por segurança, inclusive pelo cabo.
+  macros; timers de sono no PRO HE. O reset de fábrica do teclado fica desativado por segurança, inclusive pelo cabo.
+
+> **X68 HE:** a troca de perfil pelo aplicativo permanece bloqueada nas três revisões. O backup usa somente
+> consultas e lê Hall Effect do perfil ativo. Para configurar outro perfil, selecione-o no teclado e faça
+> uma nova leitura no app. Os ajustes de suspensão sem fio ficam ocultos nesse modelo USB.
 
 > **Teclado pelo receptor 2.4G (`3151:5026`):** permite ler e aplicar configurações, incluindo iluminação e
 > Hall Effect do **perfil ativo**. A troca de perfil e a calibração ficam desativadas sem fio. No **X68 V2

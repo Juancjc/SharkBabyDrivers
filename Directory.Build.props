@@ -1,7 +1,7 @@
 <Project>
   <!-- Single source of the app version. Releases override it from the git tag (vX.Y.Z → -p:Version=X.Y.Z). -->
   <PropertyGroup>
-    <Version>1.6.0</Version>
+    <Version>1.6.1</Version>
     <Product>SharkBabyDrivers</Product>
     <Company>Juancjc</Company>
     <Copyright>Copyright © 2026 Juan Carlos Justiniano Coelho</Copyright>

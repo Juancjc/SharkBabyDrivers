@@ -94,6 +94,7 @@ public sealed class X68Vm : DeviceVm
 
     public X68Image Img { get; private set; } = new();
     public X68Model Model => Img.Model;
+    public bool HasWirelessSleep => !Model.IsHe;
     public ObservableCollection<KeyCapVm> Caps { get; } = new();
     public ObservableCollection<DksBindingVm> DksBindings { get; } = new();
     public ObservableCollection<X68MacroVm> Macros { get; } = new();
@@ -805,7 +806,7 @@ public sealed class X68Vm : DeviceVm
 
     protected override object CaptureProfile()
     {
-        return CaptureEditorImage().ToSnapshot(Device.DeviceKey, Device.Model);
+        return CaptureEditorImage().ToSnapshot(Device.DeviceKey, Device.Model, Device.ProductId);
     }
 
     private X68Image CaptureEditorImage()

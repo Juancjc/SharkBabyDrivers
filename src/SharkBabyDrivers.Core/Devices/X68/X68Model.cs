@@ -5,11 +5,14 @@ namespace SharkBabyDrivers.Core.Devices.X68;
 /// <summary>One physical key cap for drawing the keyboard: position in key units and its matrix slot.</summary>
 public sealed record KeyCap(int Slot, string Label, double X, double Y, double Width, byte DefaultUsage);
 
-/// <summary>Model data (default matrices + physical layout) for the two X68 PRO HE hardware revisions.</summary>
+/// <summary>Model data (default matrices + physical layout) for X68 HE and X68 PRO HE hardware revisions.</summary>
 public sealed class X68Model
 {
     public uint Id { get; }
     public string Name { get; }
+    public bool IsHe => Id is 2270 or 2472 or 2902;
+    public string DeviceName => IsHe ? "Attack Shark X68 HE" : "Attack Shark X68 PRO HE";
+    public ushort WiredProductId => IsHe ? X68Protocol.PidX68HeWired : X68Protocol.PidX68ProHeWired;
     public byte[] DefaultKeys { get; }
     public byte[] DefaultFnWin { get; }
     public byte[] DefaultFnMac { get; }
@@ -27,9 +30,23 @@ public sealed class X68Model
         X68DefaultMatrices.Id2370FnWin, X68DefaultMatrices.Id2370FnMac, fRow: false);
     public static readonly X68Model Rev2901 = new(2901, "X68 PRO HE (v2)", X68DefaultMatrices.Id2901Keys,
         X68DefaultMatrices.Id2901FnWin, X68DefaultMatrices.Id2901FnMac, fRow: true);
+    public static readonly X68Model He2270 = new(2270, "X68 HE", X68HeDefaultMatrices.Keys,
+        X68HeDefaultMatrices.FnWin, X68HeDefaultMatrices.Id2270FnMac, fRow: false);
+    public static readonly X68Model He2472 = new(2472, "X68 HE", X68HeDefaultMatrices.Keys,
+        X68HeDefaultMatrices.FnWin, X68HeDefaultMatrices.Id2472FnMac, fRow: false);
+    // The official driver maps 2902 and 2901 to the same model class.
+    public static readonly X68Model He2902 = new(2902, "X68 HE (v2)", X68DefaultMatrices.Id2901Keys,
+        X68DefaultMatrices.Id2901FnWin, X68DefaultMatrices.Id2901FnMac, fRow: true);
 
-    public static X68Model ForId(uint id) => id == 2901 ? Rev2901 : Rev2370;
-    public static bool IsKnown(uint id) => id is 2370 or 2901;
+    public static X68Model ForId(uint id) => id switch
+    {
+        2270 => He2270,
+        2472 => He2472,
+        2901 => Rev2901,
+        2902 => He2902,
+        _ => Rev2370,
+    };
+    public static bool IsKnown(uint id) => id is 2270 or 2370 or 2472 or 2901 or 2902;
 
     /// <summary>Slot whose factory action is the given plain key (or Fn).</summary>
     public int? SlotOf(byte usage)

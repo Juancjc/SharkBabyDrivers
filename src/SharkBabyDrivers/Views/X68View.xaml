@@ -503,7 +503,7 @@
                             </DockPanel>
                         </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource Card}">
+                    <Border Style="{StaticResource Card}" Visibility="{Binding HasWirelessSleep, Converter={StaticResource VisIf}}">
                         <StackPanel>
                             <TextBlock Text="{l:T power_title}" Style="{StaticResource H2}"/>
                             <TextBlock Text="{l:T kb_sleep}" Style="{StaticResource Label}" Margin="0,10,0,0"/>

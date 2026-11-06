@@ -63,11 +63,11 @@ public sealed class X68Image
 
     // ------------------------------------------------------------------ snapshot (backup) mapping
 
-    public DeviceSnapshot ToSnapshot(string deviceKey, string model)
+    public DeviceSnapshot ToSnapshot(string deviceKey, string model, ushort? productId = null)
     {
         var s = new DeviceSnapshot
         {
-            Model = model, DeviceKey = deviceKey, VendorId = VendorId, ProductId = PidX68ProHeWired,
+            Model = model, DeviceKey = deviceKey, VendorId = VendorId, ProductId = productId ?? Model.WiredProductId,
             Firmware = $"usb {UsbFirmware:X4} rf {RfFirmware:X4} id {DeviceId}",
         };
         s.Notes["device_id"] = DeviceId.ToString();

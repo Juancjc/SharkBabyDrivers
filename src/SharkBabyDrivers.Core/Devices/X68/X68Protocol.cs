@@ -1,7 +1,7 @@
 namespace SharkBabyDrivers.Core.Devices.X68;
 
 /// <summary>
-/// Attack Shark X68 PRO HE (RY5088 platform) vendor protocol, reverse-engineered from the official
+/// Attack Shark X68 HE / PRO HE (RY5088 platform) vendor protocol, reverse-engineered from the official
 /// "Attack Shark Driver v4" 3.1.12 (Electron renderer + iot_driver.exe). 64-byte feature reports with
 /// report id 0 on interface 2 (usage page 0xFFFF, usage 0x02).
 /// </summary>

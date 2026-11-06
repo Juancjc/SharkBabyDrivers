@@ -1,10 +1,16 @@
-# ATTACK SHARK X68 PRO HE — HID protocol (reverse-engineered from "Attack Shark Driver v4" 3.1.12)
+# ATTACK SHARK X68 HE / PRO HE — HID protocol (reverse-engineered from "Attack Shark Driver v4" 3.1.12)
 
 Scope: the wired protocol was derived statically from the vendor installer
 `ATTACK SHARK X68PROHE SOFT.exe`. The 2.4 GHz transport in §5 was subsequently confirmed on a real X68 V2
 (device id 2901) with the `3151:5026` receiver; it replaces the earlier, incorrect static interpretation.
 Confidence tags: **[CODE]** = read directly from code, **[LIVE]** = confirmed on that keyboard/receiver,
 **[INF]** = inferred, **[UNVERIFIED]** = needs a live test / USB capture.
+
+The local `ATTACKSHARKX68HE.zip` was also inspected. Its `ATTACK SHARK X68HE SOFT.exe` and the PRO archive's
+executable are byte-identical (101,868,672 bytes, SHA-256
+`3ee70880c8b5adcd469a0e3ebefa7e280a22fa23ff74e369955511a2c58e04a2`). The existing extracted source therefore
+also supplies the non-PRO model classes below. HE support is statically verified and simulator-tested,
+not yet tested on physical HE hardware.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -21,15 +27,15 @@ Confidence tags: **[CODE]** = read directly from code, **[LIVE]** = confirmed on
   GETs; **multi-page GETs (key matrix, macros, HE tables, per-key RGB) return 64 raw data bytes with no header**. **[CODE]**
 * Device is identified by **command 0x8F** → `uint32 LE deviceId @resp[1..4]`, `uint16 LE fw version @resp[7..8]`.
   X68 PRO HE = **deviceId 2370** (`ry5088_x68_8k_002`) or **2901** (`ry5088_x68v2_8k`, has an F-row in the matrix).
-  Wired USB = **VID 0x3151 PID 0x502F** (8 kHz). **[CODE]**
+  Wired USB = **VID 0x3151 PID 0x502F** (8 kHz). X68 HE uses **PID 0x502D**, ids **2270, 2472, 2902**, also 8 kHz. **[CODE]**
 * `3151:5026` is a **2.4 GHz "dongle_common" receiver (1 kHz)**. It forwards the same 64-byte keyboard packets
   without a prefix; retrieving an RF response needs the receiver-local `F7`/`FC` sequence in §5. **[LIVE]**
 * **Onboard profiles: 4** (`layer: 4`). Key matrix / Fn layer GETs take an explicit profile index;
   **HE (magnetic switch) tables and probably lighting apply to the *active* profile only**. **Never send 0x04
   over the dongle, or to X68 V2 (id 2901) even over USB.** `CanSwitchProfiles` stays false until identification,
   and remains false for every dongle and for model 2901. Snapshots of 2901 use GETs only and cover HE of the active
-  profile on both links; change profiles physically on the keyboard, then reread. Other identified models retain
-  USB profile switching (§7).
+  profile on both links; change profiles physically on the keyboard, then reread. Only identified PRO id 2370
+  retains USB profile switching (§7); all HE revisions use GET-only backups and active-profile HE.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -93,6 +99,23 @@ used by X68).
 Firmware version drives two behaviours (`v = rfVersion || usbVersion`) **[CODE]**:
 * **travel step multiplier** `k`: `v < 0x300 → 10` (0.1 mm units), `0x300 ≤ v < 0x500 → 100` (0.01 mm), `v ≥ 0x500 → 200` (0.005 mm).
 * **top dead-zone supported** iff `v ≥ 0x400`.
+
+### 2.4 X68 HE model classes **[CODE]**
+
+| ID | Model loader name | Source chunk | Default matrices |
+|---|---|---|---|
+| 2270 | `ry5088_x68rt004_8k_dm` | `51bbd794.js` | HE normal / Fn Windows / Fn Mac |
+| 2472 | `ry5088_x682_8k_dm` | `bd86972c.js` | Same normal / Fn Windows as 2270, different Fn Mac |
+| 2902 | `ry5088_x68v2_8k_dm` | `69a807f0.js` | Exactly the same class and matrices as PRO id 2901 |
+
+All use PID `502D`, four profiles, `Common66_X68`, magnetic switches and lighting layout `I`. The wired HID
+filter advertises `reportRate: 8000`. Unlike PRO, their database entries omit `sleep24` and `sleepBT`.
+SharkBabyDrivers hides wireless timers and skips their GET/SET commands on HE. USB is the advertised HE
+connection; the shared receiver transport's simulation does not establish physical wireless HE support.
+
+The complete 2270/2472 arrays are preserved in `X68HeDefaultMatrices.g.cs`. Both have media actions in normal
+slots 90–92 (volume up, volume down, mute), which PRO 2370 lacks. Revision 2472 also adds Mac Fn actions in
+slots 91–97. Do not substitute PRO 2370 defaults for these revisions.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -357,7 +380,7 @@ Debounced 300 ms before dispatch.
 
 Read order used by the vendor app (`writeToAppState`, index.js 69843 / 68340-68460) plus what is needed for a full image.
 **The sequence below documents the vendor's full-image procedure. In SharkBabyDrivers, profile-selection steps
-are allowed only on identified models other than 2901 over USB. Over 2.4 GHz, and on id 2901 on either link,
+are allowed only on identified PRO id 2370 over USB. Over 2.4 GHz, on every HE revision, and on id 2901 on either link,
 skip profile selection and read HE only for the already-active profile (§5). Snapshots of 2901 send GETs only.**
 1. `0x8F` id + fw, `0x80` rf fw → choose class (2370/2901), compute `k` and top-deadzone support.
 2. `0x84` active profile `P0` (remember it!).
@@ -374,7 +397,7 @@ skip profile selection and read HE only for the already-active profile (§5). Sn
 8. Restore active profile: `0x04 P0`.
 Store raw 64-byte responses (plus decoded JSON) so a restore can replay them byte-exact with the SET counterparts
 (0x0A bulk, 0x10 bulk, 0x0B, 0x0C, 0x65 bulk per op, 0x07, 0x09, 0x11, 0x03, 0x17, 0x06, 0x04).
-Note: on other identified models over USB, step 6's `0x04` writes are the only writes in a backup, and the original
+Note: on identified PRO id 2370 over USB, step 6's `0x04` writes are the only writes in a backup, and the original
 profile is restored in a `finally` block. A dongle backup, or an id 2901 backup over either link, sends no
 profile-selection commands and contains no HE data for inactive profiles. Select another profile physically
 and reread to configure its HE settings.

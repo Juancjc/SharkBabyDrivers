@@ -7,7 +7,7 @@ namespace SharkBabyDrivers.Core.Devices.X68;
 [SupportedOSPlatform("windows")]
 public sealed class X68Driver : IDeviceDriver
 {
-    public string Model => "Attack Shark X68 PRO HE";
+    public string Model => "Attack Shark X68 HE / X68 PRO HE";
 
     public bool Matches(IReadOnlyList<HidDeviceInfo> collections)
     {
@@ -34,7 +34,7 @@ public sealed class X68Driver : IDeviceDriver
     }
 }
 
-/// <summary>X68 PRO HE over the USB cable (3151:502F) or its 2.4 GHz receiver (3151:5026).</summary>
+/// <summary>X68 HE (3151:502D) / PRO HE (3151:502F), with a shared 2.4 GHz receiver path (3151:5026).</summary>
 [SupportedOSPlatform("windows")]
 public sealed class X68Device : ISharkDevice
 {
@@ -44,7 +44,9 @@ public sealed class X68Device : ISharkDevice
     private uint? _identifiedDeviceId;
 
     public string DeviceKey { get; }
-    public string Model => "Attack Shark X68 PRO HE";
+    public string Model => _identifiedDeviceId is { } id && X68Model.IsKnown(id)
+        ? X68Model.ForId(id).DeviceName
+        : ProductId == PidX68HeWired ? "Attack Shark X68 HE" : "Attack Shark X68 PRO HE";
     public DeviceKind Kind => DeviceKind.Keyboard;
     public LinkKind Link { get; } = LinkKind.Wired;
     public ushort VendorId => X68Protocol.VendorId;
@@ -165,13 +167,13 @@ public sealed class X68Device : ISharkDevice
         var rf = Ask(GetRfVersion);
         img.RfFirmware = rf[0] == GetRfVersion ? rf[2] << 8 | rf[1] : 0;
         if (!X68Model.IsKnown(img.DeviceId))
-            throw new NotSupportedException($"Teclado com id {img.DeviceId} não é um X68 PRO HE conhecido; nada foi alterado.");
+            throw new NotSupportedException($"Teclado com id {img.DeviceId} não é um X68 HE / X68 PRO HE conhecido; nada foi alterado.");
 
         img.ActiveProfile = QueryEcho(GetProfile)[1];
         progress?.Report("iluminação e opções");
         img.Led = QueryEcho(GetLedParam);
         img.KbOption = QueryEcho(GetKbOption);
-        img.Sleep = QueryEcho(GetSleepTime);
+        if (!img.Model.IsHe) img.Sleep = QueryEcho(GetSleepTime);
         img.Report = QueryEcho(GetReport);
         img.AutoOs = QueryEcho(GetAutoOs);
         img.Debounce = QueryEcho(GetDebounce);
@@ -201,7 +203,7 @@ public sealed class X68Device : ISharkDevice
                 progress?.Report($"perfil {profile + 1}: Hall Effect");
                 if (profile != current)
                 {
-                    // The receiver and revision 2901 (also over cable) must never switch profiles.
+                    // Only the identified original PRO revision may switch profiles over cable.
                     if (!CanSwitchProfiles) continue;
                     SelectProfile(profile);
                     current = profile;
@@ -304,7 +306,9 @@ public sealed class X68Device : ISharkDevice
     public void SendScreenColor(byte r, byte g, byte b) => Send(Command([SetScreenColor, r, g, b]));
 
     /// <summary>Sleep timers (answer of 0x91): u16 LE seconds, [8] BT idle, [10] 2.4G idle, [12] BT deep, [14] 2.4G deep.</summary>
-    public byte[] ReadSleep() => QueryEcho(GetSleepTime);
+    public byte[] ReadSleep() => ProductId == PidX68HeWired
+        || (_identifiedDeviceId is { } id && X68Model.ForId(id).IsHe)
+        ? new byte[PacketLength] : QueryEcho(GetSleepTime);
 
     /// <summary>Largest timer the firmware accepts (device database: 0..64800 s).</summary>
     public const int MaxSleepSeconds = 64800;
@@ -385,8 +389,8 @@ public sealed class X68Device : ISharkDevice
 
     /// <summary>
     /// Profile switching is allowed only after identifying the original revision (2370) over cable.
-    /// Revision 2901 has also locked up after a wired profile switch. It and the receiver therefore use
-    /// only the physical active profile's HE tables, without sending a profile switch even during backup.
+    /// Revision 2901 has also locked up after a wired profile switch. It, the receiver, and the newly
+    /// supported HE revisions use only the physical active profile's HE tables, without switching during backup.
     /// </summary>
     public bool CanSwitchProfiles => Link == LinkKind.Wired && _identifiedDeviceId == 2370;
 
@@ -513,7 +517,7 @@ public sealed class X68Device : ISharkDevice
             && Diff(img.Led.AsSpan(1, 7).ToArray(), before?.Led.AsSpan(1, 7).ToArray())) { progress?.Report("iluminação"); WriteLed(img.Led); }
         if (Diff(img.KbOption.AsSpan(2, 4).ToArray(), before?.KbOption.AsSpan(2, 4).ToArray())) WriteKbOption(img.KbOption);
         // Out-of-range timers (seen in a backup read while another program garbled the answers) are left alone.
-        if (SleepInRange(img.Sleep) && Diff(img.Sleep.AsSpan(8, 8).ToArray(), before?.Sleep.AsSpan(8, 8).ToArray())) WriteSleep(img.Sleep);
+        if (!img.Model.IsHe && SleepInRange(img.Sleep) && Diff(img.Sleep.AsSpan(8, 8).ToArray(), before?.Sleep.AsSpan(8, 8).ToArray())) WriteSleep(img.Sleep);
         if (before is null || img.Report[2] != before.Report[2]) WritePolling(img.Report[2]);
         if (before is null || img.Debounce[1] != before.Debounce[1]) WriteDebounce(img.Debounce[1]);
         if (before is null || img.AutoOs[1] != before.AutoOs[1]) WriteAutoOs(img.AutoOsDetect);
@@ -566,7 +570,7 @@ public sealed class X68Device : ISharkDevice
     public Task RunAsync(Action work, CancellationToken ct = default) => RunAsync(() => { work(); return true; }, ct);
 
     public Task<DeviceSnapshot> ReadSnapshotAsync(IProgress<string>? progress = null, CancellationToken ct = default) =>
-        RunAsync(() => ReadImage(progress, ct).ToSnapshot(DeviceKey, Model), ct);
+        RunAsync(() => ReadImage(progress, ct).ToSnapshot(DeviceKey, Model, ProductId), ct);
 
     public Task RestoreSnapshotAsync(DeviceSnapshot snapshot, IProgress<string>? progress = null, CancellationToken ct = default) =>
         RunAsync(() => WriteImageVerified(X68Image.FromSnapshot(snapshot), null, progress, ct), ct);
