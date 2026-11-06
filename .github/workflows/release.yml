@@ -60,4 +60,11 @@ jobs:
           Feche os programas oficiais da Attack Shark antes de abrir. Ao conectar cada dispositivo o app faz um backup
           do que está salvo nele antes de permitir qualquer gravação.
           "@
-          gh release create "${{ github.ref_name }}" dist/*.zip --title "SharkBabyDrivers ${{ github.ref_name }}" --notes "$notes" --generate-notes
+          gh release view "${{ github.ref_name }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            # A release published through the GitHub UI already exists when its tag starts this workflow.
+            gh release upload "${{ github.ref_name }}" dist/*.zip --clobber
+          } else {
+            gh release create "${{ github.ref_name }}" dist/*.zip --title "SharkBabyDrivers ${{ github.ref_name }}" --notes "$notes" --generate-notes
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

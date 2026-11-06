@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using SharkBabyDrivers.Core;
 using SharkBabyDrivers.Core.Devices;
 using SharkBabyDrivers.Core.Devices.X11;
+using SharkBabyDrivers.Core.Devices.R5;
 using SharkBabyDrivers.Core.Devices.X68;
 using SharkBabyDrivers.Core.Storage;
 using SharkBabyDrivers.Infrastructure;
@@ -48,6 +49,7 @@ public sealed class MainVm : ObservableObject, IDisposable
         if (App.IsPreview)
         {
             OnConnected(X11Device.CreatePreview());
+            OnConnected(new R5Device(new R5Simulator(), "r5-demo-preview", R5Protocol.DonglePid) { DelayMs=0 });
             var sim = new X68Simulator(X68Simulator.FactoryImage(2901, 0x0505));
             OnConnected(new X68Device(sim, "x68-demo-preview") { TransferDelayMs = 0, WriteSettleMs = 0 });
             return;
@@ -119,6 +121,7 @@ public sealed class MainVm : ObservableObject, IDisposable
         DeviceVm vm = device switch
         {
             X11Device m => new X11Vm(m),
+            R5Device r => new R5Vm(r),
             X68Device k => new X68Vm(k, Lighting),
             _ => new UnsupportedDeviceVm(device),
         };

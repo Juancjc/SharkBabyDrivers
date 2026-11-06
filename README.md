@@ -11,11 +11,12 @@
 
 # SharkBabyDrivers
 
-Um app só, leve e em português (ou inglês), para configurar o **mouse Attack Shark X11** e os
+Um app só, leve e em português (ou inglês), para configurar o **mouses Attack Shark X11 e R5 Ultra** e os
 **teclados Attack Shark X68 HE e X68 PRO HE**.
 
 | Modelo | Conexão | Revisões do teclado |
 |---|---|---|
+| Attack Shark R5 Ultra | Cabo USB (`373E:0046`) ou receptor 8K (`373E:0047`) | - |
 | Attack Shark X11 | Cabo USB ou receptor 2.4G | — |
 | Attack Shark X68 HE | Cabo USB (`3151:502D`) | 2270, 2472, 2902 |
 | Attack Shark X68 PRO HE | Cabo USB ou receptor 2.4G | 2370, 2901 |
@@ -47,6 +48,18 @@ X68 HE físico. O suporte existente do PRO HE continua disponível.
 - Função dos 6 botões: cliques, DPI, mídia, navegador, atalhos prontos, atalho personalizado, macro
 - Iluminação (7 efeitos, cor, brilho, velocidade), sono e sono profundo
 - Macros gravadas pelo teclado, com repetição; bateria em tempo real; reset de fábrica
+
+**Mouse R5 Ultra** (adicionado na versão 1.7.0)
+- Integração nativa baseada no pacote `ATTACKSHARKR5.zip` (software oficial 1.0.0.2).
+- DPI X/Y dos estágios existentes (50–42000), estágio ativo, polling até 1000 Hz pelo cabo e 8000 Hz pelo receptor.
+- Debounce, suspensão, LOD, Angle Snap, Motion Sync, Ripple Control e Tracking Mode.
+- Cinco botões: funções de mouse, alternar DPI e atalhos de teclado personalizados.
+- Backup original, perfis salvos, importação/exportação e confirmação por releitura após aplicar.
+- O backup cobre os ajustes e atribuições do **perfil ativo**; não inclui os dados de macros nem cores DPI.
+  Macros existentes permanecem no mouse; criar ou transferir macros e editar cores DPI ainda não está disponível.
+- Não troca perfis, não reseta e não atualiza firmware. Para editar outro perfil, selecione-o no mouse e releia.
+- **Validado no simulador; validação em R5 Ultra físico pendente.** O modo `--preview` inclui um R5 simulado.
+  Veja [o protocolo e o roteiro de teste](docs/PROTOCOL_R5_ULTRA.md).
 
 **Teclados X68 HE** (cabo USB) **e X68 PRO HE** (cabo USB ou receptor 2.4G, com as limitações abaixo)
 - 4 perfis da memória do teclado; camadas Normal, Fn Windows e Fn Mac

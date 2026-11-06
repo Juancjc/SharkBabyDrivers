@@ -10,6 +10,7 @@
         TextOptions.TextFormattingMode="Display" UseLayoutRounding="True"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
+        <DataTemplate DataType="{x:Type vm:R5Vm}"><v:R5View/></DataTemplate>
         <DataTemplate DataType="{x:Type vm:X11Vm}"><v:X11View/></DataTemplate>
         <DataTemplate DataType="{x:Type vm:X68Vm}"><v:X68View/></DataTemplate>
         <DataTemplate DataType="{x:Type vm:UnsupportedDeviceVm}"><v:UnsupportedView/></DataTemplate>
