@@ -138,6 +138,11 @@ public partial class App : Application
     public static void Log(Exception? ex)
     {
         if (ex is null) return;
+        LogMessage(ex.ToString());
+    }
+
+    internal static void LogMessage(string message)
+    {
         try
         {
             lock (LogLock)
@@ -145,7 +150,7 @@ public partial class App : Application
                 Directory.CreateDirectory(AppPaths.Root);
                 var info = new FileInfo(AppPaths.Log);
                 if (info.Exists && info.Length > 1_000_000) info.Delete();
-                File.AppendAllText(AppPaths.Log, $"[{DateTime.Now:O}] {ex}\n\n");
+                File.AppendAllText(AppPaths.Log, $"[{DateTime.Now:O}] {message}\n\n");
             }
         }
         catch

@@ -148,7 +148,7 @@
         </Style>
     </UserControl.Resources>
 
-    <TabControl Margin="24,0,24,0" IsEnabled="{Binding IsReady}">
+    <TabControl Margin="24,0,24,0" IsEnabled="{Binding CanWrite}">
         <TabItem Header="{l:T mouse_overview}">
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,16">
                 <Grid>

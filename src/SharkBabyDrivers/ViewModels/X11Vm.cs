@@ -175,6 +175,9 @@ public sealed class X11Vm : DeviceVm
     private readonly X11Device _mouse;
     private X11Config _original = X11Config.FactoryDefault();
     private X11AppProfile _savedProfile = new();
+    private bool _reapplyProfile;
+    private bool _dpiStageEdited;
+    private bool HasStagedDpi => _reapplyProfile || _dpiStageEdited;
     private int? _battery;
     private bool _charging;
     private MacroVm? _selectedMacro;
@@ -205,8 +208,19 @@ public sealed class X11Vm : DeviceVm
     public X11Vm(X11Device device) : base(device)
     {
         _mouse = device;
-        _mouse.EventReceived += e => Ui.Post(() => OnMouseEvent(e));
-        _mouse.WaitingForWake += () => Ui.Post(() => { State = DeviceState.WaitingWake; StatusText = Loc.T("wake_hint"); });
+        _mouse.EventReceived += e =>
+        {
+            // Ignore DPI changes at receipt as well as dispatch, so a queued write echo cannot replace
+            // the requested stage after Apply has already finished.
+            if (e is X11Event.DpiStage && (Busy || HasStagedDpi)) return;
+            Ui.Post(() => OnMouseEvent(e));
+        };
+        _mouse.WaitingForWake += () => Ui.Post(() =>
+        {
+            // A failed Apply must leave its draft available for another attempt, without a new initialization.
+            if (State is DeviceState.Reading or DeviceState.WaitingWake) State = DeviceState.WaitingWake;
+            StatusText = Loc.T("wake_hint");
+        });
         for (var i = 0; i < X11Protocol.Stages; i++) Stages.Add(new StageVm(this, i));
         foreach (var b in X11Buttons.Physical) Buttons.Add(new ButtonVm(this, b));
         ActionView = CollectionViewSource.GetDefaultView(ActionOptions);
@@ -309,6 +323,7 @@ public sealed class X11Vm : DeviceVm
     /// <summary>Called by every setter: refresh dependent bindings and mark the page dirty.</summary>
     public void Changed()
     {
+        if (Working.ActiveStage != _original.ActiveStage) _dpiStageEdited = true;
         foreach (var s in Stages) s.Refresh();
         OnPropertyChanged(string.Empty);
         MarkDirty();
@@ -445,9 +460,10 @@ public sealed class X11Vm : DeviceVm
                 Battery = b.Percent;
                 Charging = b.State == BatteryState.Charging;
                 break;
-            case X11Event.DpiStage d when d.Stage is >= 1 and <= X11Protocol.Stages:
+            case X11Event.DpiStage d when !Busy && d.Stage is >= 1 and <= X11Protocol.Stages:
                 // The DPI button changed the active stage on the mouse itself: follow it without marking dirty.
-                if (Working.IsStageEnabled(d.Stage - 1)) Working.ActiveStage = d.Stage;
+                // A loaded profile or an edited stage is still a draft; an event must not replace its target.
+                if (!HasStagedDpi && Working.IsStageEnabled(d.Stage - 1)) Working.ActiveStage = d.Stage;
                 if (_original.IsStageEnabled(d.Stage - 1)) _original.ActiveStage = d.Stage;
                 foreach (var s in Stages) s.Refresh();
                 break;
@@ -463,6 +479,8 @@ public sealed class X11Vm : DeviceVm
         FirmwareText = snapshot.Firmware;
         Profile = X11AppProfile.Load(Device.DeviceKey);
         _savedProfile = Profile.Clone();
+        _reapplyProfile = false;
+        _dpiStageEdited = false;
         ReloadMacros();
         BuildActionOptions();
         foreach (var b in Buttons) b.Refresh();
@@ -480,41 +498,66 @@ public sealed class X11Vm : DeviceVm
     protected override async Task WriteChangesAsync()
     {
         var desired = Working.Clone();
-        var before = _original;
-        var buttonsChanged = !Profile.ButtonsWritten
-            ? Profile.Buttons.Zip(X11Buttons.FactoryDefaults()).Any(p => p.First.ToAction() != p.Second) || Profile.ButtonMacros.Count > 0
-            : JsonEqual(Profile.Buttons, _savedProfile.Buttons) is false || JsonEqual(Profile.ButtonMacros, _savedProfile.ButtonMacros) is false
-              || JsonEqual(Profile.Macros, _savedProfile.Macros) is false;
-        var slots = Profile.Buttons.Select(b => b.ToAction()).ToList();
-        var macros = Profile.ButtonMacros
-            .Select(kv => (Slot: kv.Key, Macro: Profile.Macros.FirstOrDefault(m => m.Name == kv.Value)))
+        var lastRead = _original.Clone();
+        var profile = Profile.Clone();
+        var reapply = _reapplyProfile;
+        // These assignments cannot be trusted from the app's cache alone: the physical mouse can
+        // fall back to its default side buttons without changing any readable configuration report.
+        var writeButtons = reapply || profile.ButtonsWritten
+            || profile.Buttons.Zip(X11Buttons.FactoryDefaults()).Any(p => p.First.ToAction() != p.Second)
+            || profile.ButtonMacros.Count > 0;
+        var slots = profile.Buttons.Select(b => b.ToAction()).ToList();
+        var macros = profile.ButtonMacros
+            .Select(kv => (Slot: kv.Key, Macro: profile.Macros.FirstOrDefault(m => m.Name == kv.Value)))
             .Where(x => x.Macro is not null)
             .Select(x => (SlotId: X11Buttons.MacroSlotId((X11Button)x.Slot), Def: x.Macro!.ToDefinition()))
             .ToList();
         foreach (var (_, def) in macros) X11Macro.BuildLogical(1, def); // validates length before touching the device
 
-        await _mouse.RunAsync(() =>
+        var applied = await _mouse.RunAsync(() =>
         {
-            _mouse.WriteConfig(desired, before);
-            if (buttonsChanged)
+            // The mouse can reset or change outside this app. The last editor snapshot is not proof of
+            // its current state. This read also confirms the mouse is awake before write-only commands.
+            var current = _mouse.ReadConfig();
+            if (!lastRead.SameAs(current))
+                App.LogMessage($"X11 {Device.DeviceKey}: configuração do mouse mudou desde a última leitura. " +
+                    $"Anterior: {X11Device.Describe(lastRead)}. Atual: {X11Device.Describe(current)}.");
+            _mouse.WriteConfig(desired, reapply ? null : current);
+            if (writeButtons)
             {
                 foreach (var (slotId, def) in macros) _mouse.WriteMacro(slotId, def);
                 _mouse.WriteButtons(slots);
             }
+            var actual = _mouse.ReadConfig();
+            if (!desired.SameAs(actual))
+            {
+                App.LogMessage($"X11 {Device.DeviceKey}: configuração divergente após aplicar. " +
+                    $"Esperado: {X11Device.Describe(desired)}. Lido: {X11Device.Describe(actual)}.");
+                throw new IOException("O mouse não manteve as configurações após a gravação. O perfil continua salvo; acorde o mouse e tente aplicar novamente.");
+            }
+            App.LogMessage($"X11 {Device.DeviceKey}: configuração conferida após aplicar " +
+                $"(perfil completo: {reapply}; botões enviados: {writeButtons}; macros enviadas: {(writeButtons ? macros.Count : 0)}). {X11Device.Describe(actual)}.");
+            return actual;
         });
-        _original = desired.Clone();
-        if (buttonsChanged) Profile.ButtonsWritten = true;
-        Profile.Save(Device.DeviceKey);
-        _savedProfile = Profile.Clone();
+        if (writeButtons) profile.ButtonsWritten = true;
+        profile.Save(Device.DeviceKey);
+        _original = applied.Clone();
+        Working = applied.Clone();
+        Profile.ButtonsWritten = profile.ButtonsWritten;
+        _savedProfile = profile.Clone();
+        _reapplyProfile = false;
+        _dpiStageEdited = false;
+        State = DeviceState.Ready;
+        foreach (var s in Stages) s.Refresh();
+        OnPropertyChanged(string.Empty);
     }
-
-    private static bool JsonEqual<T>(T a, T b) =>
-        System.Text.Json.JsonSerializer.Serialize(a, JsonStore.Options) == System.Text.Json.JsonSerializer.Serialize(b, JsonStore.Options);
 
     protected override void DiscardChanges()
     {
         Working = _original.Clone();
         Profile = _savedProfile.Clone();
+        _reapplyProfile = false;
+        _dpiStageEdited = false;
         ReloadMacros();
         BuildActionOptions();
         foreach (var b in Buttons) b.Refresh();
@@ -557,6 +600,7 @@ public sealed class X11Vm : DeviceVm
         p.Reports = null;
         p.ButtonsWritten = Profile.ButtonsWritten;
         Profile = p;
+        _reapplyProfile = true;
         ReloadMacros();
         BuildActionOptions();
         foreach (var b in Buttons) b.Refresh();

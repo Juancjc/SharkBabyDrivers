@@ -31,7 +31,10 @@ X68 HE físico. O suporte existente do PRO HE continua disponível.
   do perfil ativo. A leitura desse modelo usa apenas consultas, sem trocar o perfil.
 - Na aba **Salvos e backup**, salve configurações com nome, carregue, importe e exporte perfis, ou restaure e
   exporte o backup original. Os perfis salvos ficam agrupados por modelo e podem ser usados pelo cabo ou receptor.
-- Grava só o que mudou, ao clicar em **Aplicar no dispositivo** (com *Descartar alterações*).
+- As alterações vão ao dispositivo ao clicar em **Aplicar no dispositivo** (com *Descartar alterações*).
+  No X11, aplicar reenvia os botões e macros já configurados pelo aplicativo, inclusive quando outro programa
+  alterou os laterais. Carregar um perfil e aplicar reenvia a configuração completa. O aplicativo lê o estado
+  atual antes de aplicar e confere os valores que o mouse permite consultar depois.
 
 ## O que dá para configurar
 

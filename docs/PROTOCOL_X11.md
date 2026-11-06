@@ -28,6 +28,26 @@ Official read order: `0B` (8 bytes, firmware id), `06` (9), `05` (15), `04` (56)
 answers `status 00` by itself while the mouse sleeps — keep retrying until it wakes (move/click the mouse).
 Buttons (0x08) and macros (0x09) **cannot be read back**; the app keeps them in its own profile.
 
+## Applying and recovering saved profiles
+
+Before every Apply, read the actual 0x06/0x05/0x04 configuration inside the device queue. Never use only
+the editor's cached baseline to decide which reports to send: the mouse may have reset or changed since
+that baseline was read. The preflight also confirms the mouse is awake before sending write-only commands.
+
+Loading/importing a saved profile forces 0x04, 0x05, 0x06, its referenced macros (0x09), and the complete
+button table (0x08), even when the file matches the app's previous state. Send buttons last, after macro data.
+Ordinary Apply also resends known app-owned button assignments and referenced macros: another configurator
+can change just the side buttons while all readable reports still match. Before this app has ever written
+buttons, preserve the safeguard against writing assumed factory assignments during unrelated edits.
+Read the configuration again after all writes and accept the new baseline only when it matches. This
+confirms the readable reports; buttons and macros still cannot be verified by reading this firmware.
+
+Keep the recovery request and draft after an error so Apply can be retried without reloading the device.
+Discarding edits cancels the full-profile recovery request. DPI events must not replace a staged DPI
+selection or mutate a write in progress. The editor is disabled while writing. Drift found during preflight
+and the result of each Apply are recorded in `sharkbabydrivers.log`; the app does not automatically rewrite
+the mouse in the background.
+
 ## Report 0x04 — DPI, colours, sensor (56 bytes)
 
 | Byte | Meaning |

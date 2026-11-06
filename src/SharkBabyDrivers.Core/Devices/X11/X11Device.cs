@@ -28,7 +28,7 @@ public sealed class X11Driver : IDeviceDriver
 [SupportedOSPlatform("windows")]
 public sealed class X11Device : ISharkDevice
 {
-    private readonly HidConnection? _config;
+    private readonly IX11FeatureTransport? _config;
     private readonly HidConnection? _events;
     private readonly Dictionary<byte, byte[]>? _previewReports;
     private readonly Dictionary<(byte Slot, byte Page), byte[]>? _previewMacroPages;
@@ -44,7 +44,7 @@ public sealed class X11Device : ISharkDevice
     /// <summary>Raised from a background thread when the mouse reports battery or a DPI-button press.</summary>
     public event Action<X11Event>? EventReceived;
 
-    /// <summary>Delay used by the official app between consecutive transfers.</summary>
+    /// <summary>Base transfer delay (120 ms in the official app); other transfer waits scale with it.</summary>
     public TimeSpan Settle { get; init; } = TimeSpan.FromMilliseconds(120);
 
     /// <summary>An isolated in-memory mouse for the UI preview; never opens a HID collection.</summary>
@@ -78,7 +78,7 @@ public sealed class X11Device : ISharkDevice
         ProductId = cfg.ProductId;
         Link = cfg.ProductId == X11Protocol.ProductIdWired ? LinkKind.Wired : LinkKind.Dongle;
         DeviceKey = $"x11-{cfg.VendorId:x4}{cfg.ProductId:x4}{(string.IsNullOrWhiteSpace(cfg.Serial) ? "" : "-" + cfg.Serial)}".ToLowerInvariant();
-        _config = HidConnection.Open(cfg);
+        _config = new HidX11FeatureTransport(HidConnection.Open(cfg));
 
         var ev = collections.FirstOrDefault(c => c.UsagePage == X11Protocol.EventUsagePage && c.InputReportLength > 0);
         if (ev is not null)
@@ -96,6 +96,15 @@ public sealed class X11Device : ISharkDevice
         }
     }
 
+    /// <summary>Device over a supplied feature-report connection, without opening a HID event collection.</summary>
+    public X11Device(IX11FeatureTransport transport, string deviceKey, ushort productId = X11Protocol.ProductIdDongle)
+    {
+        _config = transport ?? throw new ArgumentNullException(nameof(transport));
+        DeviceKey = deviceKey;
+        ProductId = productId;
+        Link = productId == X11Protocol.ProductIdWired ? LinkKind.Wired : LinkKind.Dongle;
+    }
+
     private void OnInput(byte[] report)
     {
         var e = X11Protocol.ParseEvent(report);
@@ -103,6 +112,12 @@ public sealed class X11Device : ISharkDevice
     }
 
     // ------------------------------------------------------------------ low level
+
+    private void Pause(int milliseconds)
+    {
+        if (Settle > TimeSpan.Zero)
+            Thread.Sleep(TimeSpan.FromMilliseconds(milliseconds * Settle.TotalMilliseconds / 120));
+    }
 
     /// <summary>How long a read keeps retrying while the mouse is asleep (the dongle answers "status 0" until it wakes).</summary>
     public TimeSpan WakeTimeout { get; set; } = TimeSpan.FromSeconds(20);
@@ -131,7 +146,7 @@ public sealed class X11Device : ISharkDevice
             {
                 Thread.Sleep(Settle);
                 _config!.SetFeature(X11Protocol.BuildReadRequest(rid, length, flag));
-                Thread.Sleep(TimeSpan.FromMilliseconds(attempt == 0 ? 250 : 400));
+                Pause(attempt == 0 ? 250 : 400);
                 var status = _config.GetFeature(X11Protocol.RidRead, X11Protocol.LenRead);
                 if (status[1] == 0x01)
                 {
@@ -172,13 +187,13 @@ public sealed class X11Device : ISharkDevice
             try
             {
                 _config!.SetFeature(frame);
-                Thread.Sleep(TimeSpan.FromMilliseconds(200));
+                Pause(200);
                 return;
             }
             catch (HidException ex)
             {
                 last = ex;
-                Thread.Sleep(TimeSpan.FromMilliseconds(200));
+                Pause(200);
             }
         }
         throw new IOException($"Falha ao gravar o report 0x{frame[0]:X2} no mouse.", last);
@@ -192,7 +207,7 @@ public sealed class X11Device : ISharkDevice
             Send(frame);
             var back = ReadReport(frame[0], frame[1], 0x01, TimeSpan.FromSeconds(8));
             if (back.AsSpan(compareFrom, compareCount).SequenceEqual(frame.AsSpan(compareFrom, compareCount))) return;
-            Thread.Sleep(TimeSpan.FromMilliseconds(300 * (attempt + 1)));
+            Pause(300 * (attempt + 1));
         }
         throw new IOException($"O mouse não confirmou a gravação do report 0x{frame[0]:X2}. Tente novamente perto do receptor.");
     }
@@ -224,7 +239,7 @@ public sealed class X11Device : ISharkDevice
         if (dpiChanged || lightChanged)
         {
             SendVerified(desired.DpiFrame(), 3, 46); // byte 49 (one-shot animation) is not echoed reliably
-            if (_previewReports is null) Thread.Sleep(TimeSpan.FromMilliseconds(300));
+            if (_previewReports is null) Pause(300);
         }
         if (lightChanged || dpiChanged)
             SendVerified(desired.LightFrame(), 3, 10);

@@ -3,12 +3,15 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Collections.Concurrent;
+using System.Reflection;
+using System.Text.Json;
 using SharkBabyDrivers.Core.Devices.X11;
 using SharkBabyDrivers.Core.Storage;
 using SharkBabyDrivers.Infrastructure;
 using SharkBabyDrivers.Localization;
 using SharkBabyDrivers.ViewModels;
 using SharkBabyDrivers.Views;
+using static SharkBabyDrivers.Core.Devices.X11.X11Protocol;
 
 namespace SharkBabyDrivers.Tests;
 
@@ -173,6 +176,9 @@ public sealed class X11MouseUiTests
             Assert.False(vm.Profile.ButtonsWritten);
             Assert.Equal(800, mouse.ReadConfig().GetStageDpi(0));
             progress("all editor assertions passed");
+
+            await ExerciseDpiEvents(vm, mouse, saved, progress);
+            await ExerciseProfileRecovery(host, progress);
         }
         finally
         {
@@ -186,6 +192,253 @@ public sealed class X11MouseUiTests
                 && Directory.Exists(resolved)) Directory.Delete(resolved, recursive: true);
             progress("isolated data cleaned");
         }
+    }
+
+    private static async Task ExerciseDpiEvents(X11Vm vm, X11Device mouse, SavedProfileVm saved, Action<string> progress)
+    {
+        progress("checking physical DPI events preserve a loaded draft");
+        vm.LoadProfileCommand.Execute(saved);
+        var targetStage = vm.Working.ActiveStage;
+        var physical = mouse.ReadConfig();
+        physical.ActiveStage = 2;
+        mouse.WriteConfig(physical, null);
+        Assert.True(vm.IsDirty);
+        Assert.Equal(targetStage, vm.Working.ActiveStage);
+
+        var busyEventSent = false;
+        var checkingBusyEvent = false;
+        var busyStageRefreshes = 0;
+        foreach (var stage in vm.Stages)
+            stage.PropertyChanged += (_, _) => { if (checkingBusyEvent) busyStageRefreshes++; };
+        System.ComponentModel.PropertyChangedEventHandler handler = (_, args) =>
+        {
+            if (args.PropertyName != nameof(vm.Busy) || !vm.Busy || busyEventSent) return;
+            busyEventSent = true;
+            checkingBusyEvent = true;
+            try
+            {
+                physical.ActiveStage = 3;
+                mouse.WriteConfig(physical, null);
+            }
+            finally { checkingBusyEvent = false; }
+        };
+        vm.PropertyChanged += handler;
+        try { await ApplyVm(vm); }
+        finally { vm.PropertyChanged -= handler; }
+        Assert.True(busyEventSent);
+        Assert.Equal(0, busyStageRefreshes);
+        Assert.Equal(targetStage, vm.Working.ActiveStage);
+
+        progress("following physical DPI changes while an unrelated lighting edit is pending");
+        vm.LightColor = "#123456";
+        physical = mouse.ReadConfig();
+        physical.ActiveStage = 2;
+        mouse.WriteConfig(physical, null);
+        Assert.True(vm.IsDirty);
+        Assert.Equal(2, vm.Working.ActiveStage);
+
+        progress("preserving an explicitly selected DPI stage until it is applied");
+        vm.Stages[0].IsActive = true;
+        physical.ActiveStage = 3;
+        mouse.WriteConfig(physical, null);
+        Assert.True(vm.IsDirty);
+        Assert.Equal(1, vm.Working.ActiveStage);
+    }
+
+    private static async Task ExerciseProfileRecovery(Window host, Action<string> progress)
+    {
+        progress("preparing isolated fault-capable mouse editor");
+        var transport = new ScriptedX11Transport();
+        using var mouse = new X11Device(transport, "x11-ui-recovery") { Settle = TimeSpan.Zero, WakeTimeout = TimeSpan.Zero };
+        using var vm = new X11Vm(mouse);
+        var view = new X11View { DataContext = vm };
+        host.Content = view;
+        await vm.InitializeAsync();
+        await Settle(view);
+        var tabs = Assert.Single(Descendants(view).OfType<TabControl>());
+        Assert.True(tabs.IsEnabled);
+        var defaults = transport.Config;
+        vm.NewProfileName = "Recovery defaults";
+        vm.SaveProfileCommand.Execute(null);
+        var defaultProfile = vm.SavedProfiles.Single(item => item.Name == "Recovery defaults");
+
+        vm.Stages[0].Dpi = 1200;
+        vm.LightMode = X11LightMode.Static;
+        vm.LightColor = "#AB12CD";
+        vm.PollingHz = 500;
+        vm.Assign(X11Button.Forward, vm.ActionOptions.Single(option => option.Id == "copy"));
+        vm.NewMacroCommand.Execute(null);
+        var macro = vm.SelectedMacro!;
+        macro.Add(0x04, true, 20);
+        macro.Add(0x04, false, 20);
+        vm.Assign(X11Button.Backward, vm.ActionOptions.Single(option => option.MacroName == macro.Name));
+        vm.NewProfileName = "Recovery target";
+        vm.SaveProfileCommand.Execute(null);
+        var saved = vm.SavedProfiles.Single(item => item.Name == "Recovery target");
+        var namedProfileFile = File.ReadAllText(saved.Profile.Path);
+        var target = vm.Working.Clone();
+        await ApplyVm(vm);
+        Assert.False(vm.IsDirty);
+        Assert.True(vm.Profile.ButtonsWritten);
+
+        progress("restoring only the side-button mappings changed by another mouse application");
+        var customButtons = X11Buttons.BuildReport(vm.Profile.Buttons.Select(button => button.ToAction()).ToList());
+        transport.SetFeature(X11Buttons.BuildReport(X11Buttons.FactoryDefaults()));
+        Assert.True(target.SameAs(transport.Config));
+        transport.Sent.Clear();
+        vm.LoadProfileCommand.Execute(saved);
+        await ApplyVm(vm);
+        Assert.Equal(customButtons, transport.Buttons);
+        Assert.True(target.SameAs(transport.Config));
+        AssertConfigMacroButtonOrder(transport);
+        Assert.Equal(namedProfileFile, File.ReadAllText(saved.Profile.Path));
+
+        progress("restoring known side-button mappings when applying an unrelated lighting edit");
+        transport.SetFeature(X11Buttons.BuildReport(X11Buttons.FactoryDefaults()));
+        Assert.True(target.SameAs(transport.Config));
+        vm.LightColor = "#CD34AB";
+        var lightingEdit = vm.Working.Clone();
+        transport.Sent.Clear();
+        await ApplyVm(vm);
+        Assert.Equal(customButtons, transport.Buttons);
+        Assert.True(lightingEdit.SameAs(transport.Config));
+        AssertConfigMacroButtonOrder(transport, RidDpi, RidLight);
+
+        progress("restoring the same named profile after physical configuration loss");
+        var drifted = defaults.Clone();
+        drifted.SetStageDpi(0, 3200);
+        drifted.PollingHz = 125;
+        transport.ReplaceConfig(drifted);
+        transport.SetFeature(X11Buttons.BuildReport(X11Buttons.FactoryDefaults()));
+        transport.MacroPages.Clear();
+        transport.Sent.Clear();
+        vm.LoadProfileCommand.Execute(saved);
+        await ApplyVm(vm);
+        Assert.True(target.SameAs(transport.Config));
+        Assert.Equal(X11Buttons.BuildReport(vm.Profile.Buttons.Select(button => button.ToAction()).ToList()), transport.Buttons);
+        AssertConfigMacroButtonOrder(transport);
+        Assert.Equal(3, transport.MacroPages.Count);
+        Assert.Equal(namedProfileFile, File.ReadAllText(saved.Profile.Path));
+
+        progress("applying a normal edit against actual state instead of its stale baseline");
+        transport.ReplaceConfig(drifted);
+        vm.AngleSnap = !vm.AngleSnap;
+        var edited = vm.Working.Clone();
+        transport.Sent.Clear();
+        await ApplyVm(vm);
+        Assert.True(edited.SameAs(transport.Config));
+        AssertConfigMacroButtonOrder(transport);
+
+        progress("reapplying default button mappings even when the named profile is unchanged");
+        vm.LoadProfileCommand.Execute(defaultProfile);
+        await ApplyVm(vm);
+        transport.Sent.Clear();
+        vm.LoadProfileCommand.Execute(defaultProfile);
+        await ApplyVm(vm);
+        Assert.True(defaults.SameAs(transport.Config));
+        Assert.Equal(X11Buttons.BuildReport(X11Buttons.FactoryDefaults()), transport.Buttons);
+        Assert.Equal(new byte[] { RidDpi, RidLight, RidPoll, RidButtons }, transport.Writes.Select(report => report[0]));
+
+        progress("discarding a loaded profile cancels its pending full restoration");
+        vm.LoadProfileCommand.Execute(saved);
+        vm.DiscardCommand.Execute(null);
+        vm.PollingHz = 500;
+        transport.Sent.Clear();
+        await ApplyVm(vm);
+        Assert.Equal(new byte[] { RidPoll, RidButtons }, transport.Writes.Select(report => report[0]));
+
+        progress("keeping a sleeping mouse's pending restoration available for retry");
+        vm.LoadProfileCommand.Execute(saved);
+        var persistedBeforeFailure = PersistedProfile(mouse);
+        var waitingEvents = 0;
+        mouse.WaitingForWake += () => Interlocked.Increment(ref waitingEvents);
+        mouse.WakeTimeout = TimeSpan.FromMilliseconds(20);
+        transport.Awake = false;
+        transport.Sent.Clear();
+        await Assert.ThrowsAsync<MouseAsleepException>(() => ApplyVm(vm));
+        await Settle(view);
+        Assert.True(waitingEvents > 0);
+        Assert.True(vm.IsReady);
+        Assert.True(vm.IsDirty);
+        Assert.False(vm.Busy);
+        Assert.Empty(transport.Writes);
+        Assert.Equal(persistedBeforeFailure, PersistedProfile(mouse));
+        Assert.Equal(namedProfileFile, File.ReadAllText(saved.Profile.Path));
+        transport.Awake = true;
+        mouse.WakeTimeout = TimeSpan.Zero;
+        transport.Sent.Clear();
+        await ApplyVm(vm);
+        AssertConfigMacroButtonOrder(transport);
+        Assert.True(target.SameAs(transport.Config));
+        Assert.False(vm.IsDirty);
+
+        progress("rejecting a final readback mismatch without replacing the previous applied profile");
+        vm.LoadProfileCommand.Execute(defaultProfile);
+        persistedBeforeFailure = PersistedProfile(mouse);
+        transport.AcceptWrite = report =>
+        {
+            if (report[0] == RidButtons)
+            {
+                var lost = transport.Config;
+                lost.PollingHz = 125;
+                transport.ReplaceConfig(lost);
+            }
+            return true;
+        };
+        await Assert.ThrowsAsync<IOException>(() => ApplyVm(vm));
+        Assert.True(vm.IsDirty);
+        Assert.True(vm.IsReady);
+        Assert.False(vm.Busy);
+        Assert.Equal(persistedBeforeFailure, PersistedProfile(mouse));
+        Assert.Equal(namedProfileFile, File.ReadAllText(saved.Profile.Path));
+        transport.AcceptWrite = null;
+        transport.Sent.Clear();
+        await ApplyVm(vm);
+        Assert.True(defaults.SameAs(transport.Config));
+        Assert.Equal(new byte[] { RidDpi, RidLight, RidPoll, RidButtons }, transport.Writes.Select(report => report[0]));
+
+        progress("disabling all mouse tabs while a restoration is being written");
+        vm.LoadProfileCommand.Execute(saved);
+        var writeEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        transport.AcceptWrite = report =>
+        {
+            if (report[0] == RidDpi && writeEntered.TrySetResult()) releaseWrite.Task.GetAwaiter().GetResult();
+            return true;
+        };
+        var applying = ApplyVm(vm);
+        try
+        {
+            await writeEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await Settle(view);
+            Assert.True(vm.Busy);
+            Assert.False(vm.CanWrite);
+            Assert.False(tabs.IsEnabled);
+        }
+        finally { releaseWrite.TrySetResult(); }
+        await applying;
+        transport.AcceptWrite = null;
+        await Settle(view);
+        Assert.False(vm.Busy);
+        Assert.True(tabs.IsEnabled);
+        Assert.True(target.SameAs(transport.Config));
+        progress("all mouse recovery assertions passed");
+    }
+
+    private static Task ApplyVm(X11Vm vm) =>
+        (Task)typeof(DeviceVm).GetMethod("ApplyAsync", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(vm, null)!;
+
+    private static string PersistedProfile(X11Device mouse) =>
+        JsonSerializer.Serialize(X11AppProfile.Load(mouse.DeviceKey), JsonStore.Options);
+
+    private static void AssertConfigMacroButtonOrder(ScriptedX11Transport transport, params byte[] configReports)
+    {
+        if (configReports.Length == 0) configReports = [RidDpi, RidLight, RidPoll];
+        var ids = transport.Writes.Select(report => report[0]).ToArray();
+        Assert.Equal(configReports, ids[..configReports.Length]);
+        Assert.All(ids[configReports.Length..^1], rid => Assert.Equal(RidMacro, rid));
+        Assert.Contains(RidMacro, ids);
+        Assert.Equal(RidButtons, ids[^1]);
     }
 
     private static async Task EditShortcut(X11Vm vm, X11View view, X11Button button, ButtonAction action, string text, Action<string> progress)
