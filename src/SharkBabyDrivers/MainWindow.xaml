@@ -10,6 +10,7 @@
         TextOptions.TextFormattingMode="Display" UseLayoutRounding="True"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
+        <DataTemplate DataType="{x:Type vm:R5Vm}"><v:R5View/></DataTemplate>
         <DataTemplate DataType="{x:Type vm:X11Vm}"><v:X11View/></DataTemplate>
         <DataTemplate DataType="{x:Type vm:X68Vm}"><v:X68View/></DataTemplate>
         <DataTemplate DataType="{x:Type vm:UnsupportedDeviceVm}"><v:UnsupportedView/></DataTemplate>
@@ -60,6 +61,10 @@
                 </Grid>
 
                 <StackPanel Grid.Row="1" Margin="32,0,32,10">
+                    <WrapPanel Margin="0,0,0,10">
+                        <Button Content="{l:T reset_device}" Command="{Binding ResetDeviceCommand}" ToolTip="{l:T reset_device_confirm}" Margin="0,0,8,6"/>
+                        <Button Content="{l:T reset_profile}" Command="{Binding ResetProfileCommand}" ToolTip="{l:T reset_profile_confirm}" Margin="0,0,0,6"/>
+                    </WrapPanel>
                     <Border CornerRadius="12" Padding="16,12" Background="{StaticResource AccentDim}" BorderBrush="{StaticResource AccentSoft}" BorderThickness="1"
                             Visibility="{Binding IsLoading, Converter={StaticResource VisIf}}">
                         <DockPanel>
@@ -124,6 +129,9 @@
         </DataTemplate>
     </Window.Resources>
 
+    <DockPanel>
+        <Button x:Name="UpdateBanner" DockPanel.Dock="Top" Visibility="Collapsed" Click="UpdateBannerClick"
+                HorizontalContentAlignment="Center" Background="#302717" Foreground="#FFCE66" BorderBrush="#665126" Padding="16,10"/>
     <Grid>
         <Grid.ColumnDefinitions><ColumnDefinition Width="260"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
 
@@ -173,6 +181,7 @@
                 </Grid>
 
                 <StackPanel Grid.Row="2">
+                    <Button Content="{l:T reset_all}" Command="{Binding ResetAllCommand}" ToolTip="{l:T reset_all_confirm}" HorizontalContentAlignment="Left" Margin="0,8,0,0"/>
                     <Border Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="12" Padding="12" Margin="0,16,0,16">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Left" Text="&#xE73F;" Style="{StaticResource Icon}" Foreground="{StaticResource Accent}" FontSize="17" Margin="0,0,10,0" VerticalAlignment="Top"/>
@@ -218,4 +227,5 @@
             <Button Content="{l:T refresh}" Command="{Binding RefreshCommand}" Style="{StaticResource Primary}" HorizontalAlignment="Center" Padding="24,10"/>
         </StackPanel>
     </Grid>
+    </DockPanel>
 </Window>

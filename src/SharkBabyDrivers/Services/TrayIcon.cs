@@ -161,6 +161,7 @@ public sealed class TrayIcon : IDisposable
             menu.Items.RemoveAt(0);
             item.Dispose();
         }
+        menu.Items.Add(Loc.I.Language == "en" ? "Check for updates" : "Verificar atualizações", null, async (_, _) => await ((App)System.Windows.Application.Current).Updater.CheckAsync(manual: true));
         var lighting = _vm.Lighting;
 
         menu.Items.Add(new Forms.ToolStripLabel("SharkBabyDrivers", _brandImage)

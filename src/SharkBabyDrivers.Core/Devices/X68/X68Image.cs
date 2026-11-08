@@ -61,6 +61,18 @@ public sealed class X68Image
         return c;
     }
 
+    /// <summary>Restores only the physical active profile, retaining global settings and other profiles.</summary>
+    public X68Image WithActiveProfileRestored(X68Image original)
+    {
+        if (DeviceId != original.DeviceId) throw new InvalidDataException("Backup de outro teclado.");
+        var restored = Clone();
+        restored.Keys[ActiveProfile] = original.Keys[ActiveProfile].Select(k => k.ToArray()).ToArray();
+        if (X68Device.HeWasRead(original, ActiveProfile))
+            restored.HallEffect[ActiveProfile] = original.HallEffect[ActiveProfile]
+                .ToDictionary(k => k.Key, k => k.Value.ToArray());
+        return restored;
+    }
+
     // ------------------------------------------------------------------ snapshot (backup) mapping
 
     public DeviceSnapshot ToSnapshot(string deviceKey, string model, ushort? productId = null)

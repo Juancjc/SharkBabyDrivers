@@ -749,6 +749,21 @@ public sealed class X68Vm : DeviceVm
         RebuildAll();
     }
 
+    protected override async Task ResetFromOriginalAsync(DeviceSnapshot original, DeviceSnapshot current, bool profileOnly)
+    {
+        var before = X68Image.FromSnapshot(current);
+        var saved = X68Image.FromSnapshot(original);
+        var desired = saved;
+        if (profileOnly)
+        {
+            desired = before.WithActiveProfileRestored(saved);
+        }
+        desired.ActiveProfile = before.ActiveProfile;
+        _lighting.OnDisconnected(_kb);
+        try { await _kb.RunAsync(() => _kb.WriteImageVerified(desired, before)); }
+        finally { _lighting.OnConnected(_kb); }
+    }
+
     private void RebuildAll()
     {
         Caps.Clear();

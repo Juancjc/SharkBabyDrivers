@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Interop;
 using SharkBabyDrivers.Controls;
 using SharkBabyDrivers.ViewModels;
@@ -17,6 +17,13 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = _vm = new MainVm();
+        ((App)Application.Current).Updater.StateChanged += UpdateBannerState;
+        Localization.Loc.I.PropertyChanged += UpdateBannerLanguage;
+        Closed += (_, _) =>
+        {
+            ((App)Application.Current).Updater.StateChanged -= UpdateBannerState;
+            Localization.Loc.I.PropertyChanged -= UpdateBannerLanguage;
+        };
         SourceInitialized += (_, _) =>
         {
             DarkTitleBar.Apply(this);
@@ -57,7 +64,24 @@ public partial class MainWindow : Window
         if (WindowState == WindowState.Minimized) WindowState = _restoreState;
         Show();
         Activate();
+        ((App)Application.Current).Updater.ShowNews();
     }
+
+    private void UpdateBannerLanguage(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => UpdateBannerState();
+
+    private void UpdateBannerState()
+    {
+        var updater = ((App)Application.Current).Updater;
+        UpdateBanner.Visibility = updater.AvailableRelease is null ? Visibility.Collapsed : Visibility.Visible;
+        UpdateBanner.IsEnabled = !updater.IsBusy;
+        var version = updater.AvailableRelease?.Version;
+        UpdateBanner.Content = Localization.Loc.I.Language == "en"
+            ? $"\u26A0 Update available - v{version}. Click to update."
+            : $"\u26A0 Atualiza\u00E7\u00E3o dispon\u00EDvel - v{version}. Clique para atualizar.";
+    }
+
+    private async void UpdateBannerClick(object sender, RoutedEventArgs e) =>
+        await ((App)Application.Current).Updater.CheckAsync(manual: true, install: true);
 
     public void MinimizeToTray() => WindowState = WindowState.Minimized;
 

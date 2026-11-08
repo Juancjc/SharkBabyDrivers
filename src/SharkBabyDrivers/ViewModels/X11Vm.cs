@@ -616,4 +616,11 @@ public sealed class X11Vm : DeviceVm
         Profile.Save(Device.DeviceKey);
         await InitializeAsync();
     }
+
+    protected override async Task ResetFromOriginalAsync(DeviceSnapshot original, DeviceSnapshot current, bool profileOnly)
+    {
+        await Device.RestoreSnapshotAsync(original);
+        await _mouse.RunAsync(() => _mouse.WriteButtons(X11Buttons.FactoryDefaults()));
+        new X11AppProfile { ButtonsWritten = true }.Save(Device.DeviceKey);
+    }
 }

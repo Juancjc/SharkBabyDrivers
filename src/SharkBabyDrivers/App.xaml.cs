@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Windows;
 using System.Diagnostics;
 using System.Security.Principal;
@@ -25,6 +25,7 @@ public partial class App : Application
 
     private EventWaitHandle? _showSignal;
     private Services.TrayIcon? _tray;
+    public Services.AppUpdater Updater { get; } = new();
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -75,6 +76,7 @@ public partial class App : Application
         }) { IsBackground = true, Name = "show-window" }.Start();
         if (StartedInTray) window.PrepareHidden();
         else window.Show();
+        Updater.Start();
     }
 
     public static void ShowMainWindow()
@@ -99,6 +101,13 @@ public partial class App : Application
         Current.Shutdown();
     }
 
+    internal static void ExitForUpdate()
+    {
+        ExitRequested = true;
+        Current.MainWindow?.Close();
+        Current.Shutdown();
+    }
+
     private static bool HasLegacyInstance()
     {
         // Installed versions predating the mutex must also be kept away from the HID connection.
@@ -115,6 +124,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Updater.Dispose();
         _tray?.Dispose();
         _showSignal?.Dispose();
         ReleaseInstanceMutex();

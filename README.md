@@ -11,11 +11,12 @@
 
 # SharkBabyDrivers
 
-Um app só, leve e em português (ou inglês), para configurar o **mouse Attack Shark X11** e os
+Um app só, leve e em português (ou inglês), para configurar o **mouses Attack Shark X11 e R5 Ultra** e os
 **teclados Attack Shark X68 HE e X68 PRO HE**.
 
 | Modelo | Conexão | Revisões do teclado |
 |---|---|---|
+| Attack Shark R5 Ultra | Cabo USB (`373E:0046`) ou receptor 8K (`373E:0047`) | - |
 | Attack Shark X11 | Cabo USB ou receptor 2.4G | — |
 | Attack Shark X68 HE | Cabo USB (`3151:502D`) | 2270, 2472, 2902 |
 | Attack Shark X68 PRO HE | Cabo USB ou receptor 2.4G | 2370, 2901 |
@@ -47,6 +48,18 @@ X68 HE físico. O suporte existente do PRO HE continua disponível.
 - Função dos 6 botões: cliques, DPI, mídia, navegador, atalhos prontos, atalho personalizado, macro
 - Iluminação (7 efeitos, cor, brilho, velocidade), sono e sono profundo
 - Macros gravadas pelo teclado, com repetição; bateria em tempo real; reset de fábrica
+
+**Mouse R5 Ultra** (adicionado na versão 1.7.0)
+- Integração nativa baseada no pacote `ATTACKSHARKR5.zip` (software oficial 1.0.0.2).
+- DPI X/Y dos estágios existentes (50–42000), estágio ativo, polling até 1000 Hz pelo cabo e 8000 Hz pelo receptor.
+- Debounce, suspensão, LOD, Angle Snap, Motion Sync, Ripple Control e Tracking Mode.
+- Cinco botões: funções de mouse, alternar DPI e atalhos de teclado personalizados.
+- Backup original, perfis salvos, importação/exportação e confirmação por releitura após aplicar.
+- O backup cobre os ajustes e atribuições do **perfil ativo**; não inclui os dados de macros nem cores DPI.
+  Macros existentes permanecem no mouse; criar ou transferir macros e editar cores DPI ainda não está disponível.
+- Não troca perfis, não reseta e não atualiza firmware. Para editar outro perfil, selecione-o no mouse e releia.
+- **Validado no simulador; validação em R5 Ultra físico pendente.** O modo `--preview` inclui um R5 simulado.
+  Veja [o protocolo e o roteiro de teste](docs/PROTOCOL_R5_ULTRA.md).
 
 **Teclados X68 HE** (cabo USB) **e X68 PRO HE** (cabo USB ou receptor 2.4G, com as limitações abaixo)
 - 4 perfis da memória do teclado; camadas Normal, Fn Windows e Fn Mac
@@ -203,3 +216,20 @@ o controle desse dispositivo no outro app durante a configuração.
 Projeto independente, sem relação com a Attack Shark. Os protocolos foram obtidos por engenharia reversa
 dos programas oficiais para interoperabilidade. Use por sua conta; os backups existem justamente para
 poder voltar atrás.
+# Recuperação de configurações
+
+Os botões **Resetar dispositivo** e **Resetar perfil atual** ficam no topo da página do periférico; **Resetar todos os dispositivos** fica na barra lateral. A restauração exige que os dispositivos estejam prontos e tenham o backup original. Cada operação pede confirmação e salva o estado lido e o perfil do editor em arquivos `before-reset-*` na pasta de backups, antes de gravar.
+
+O reset usa a configuração da primeira conexão, não reinicia fisicamente o periférico e não é um reset de fábrica. No teclado, o reset do perfil restaura apenas as matrizes de teclas e as tabelas HE disponíveis do perfil fisicamente ativo, preservando os outros perfis e os ajustes globais. No R5, restaura as configurações no perfil ativo. No X11, restaura as configurações legíveis e os botões padrão, limpando as personalizações locais. Os perfis nomeados salvos são mantidos. Se o backup original já contiver o problema, essa restauração não o corrigirá.
+
+### Atualizações pelo programa
+
+O app consulta as releases estáveis de `Juancjc/SharkBabyDrivers` somente uma vez ao iniciar, sem consultas periódicas em segundo plano.
+Quando há uma versão nova, um aviso **⚠ Atualização disponível** aparece no topo. Clique nele para atualizar; a instalação pede confirmação. O aviso usa o resultado já consultado, sem repetir a busca. Também é possível consultar manualmente pelo menu da bandeja. O download
+verifica o SHA-256 publicado pelo GitHub e usa o pacote portátil x64. O programa fecha, substitui
+seu executável e abre novamente mostrando as notas da versão, uma única vez. Perfis e backups
+permanecem na pasta de dados. Alterações não salvas precisam ser confirmadas antes de sair.
+Se a substituição falhar, o atualizador tenta restaurar o executável anterior e informa o erro.
+A atualização interna requer a distribuição instalada/portátil; saídas de desenvolvimento com DLLs
+separadas devem ser atualizadas pelo build. Sem conexão, a checagem automática apenas registra o erro.
+As notas exibidas são o texto da release: descreva correções e novidades ao publicar cada versão.
