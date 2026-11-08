@@ -90,6 +90,6 @@ public partial class MainWindow : Window
     {
         if (!_vm.Devices.Any(d => d.IsDirty)) return true;
         RestoreFromTray();
-        return App.Confirm(Localization.Loc.T("pending_changes") + " - " + Localization.Loc.T("discard") + "?");
+        return App.Confirm(Localization.Loc.T("pending_changes") + " — " + Localization.Loc.T("discard") + "?");
     }
 }

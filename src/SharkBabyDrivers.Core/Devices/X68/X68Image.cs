@@ -25,14 +25,14 @@ public sealed class X68Image
     public byte[] FnMac { get; set; } = new byte[MatrixBytes];
     public byte[][] UserPics { get; set; } = Enumerable.Range(0, 5).Select(_ => new byte[384]).ToArray();
 
-    /// <summary>[profile][sonProfile]  512-byte key matrix.</summary>
+    /// <summary>[profile][sonProfile] → 512-byte key matrix.</summary>
     public byte[][][] Keys { get; set; } = NewMatrices();
 
-    /// <summary>[profile]  op  raw table.</summary>
+    /// <summary>[profile] → op → raw table.</summary>
     public Dictionary<HeOp, byte[]>[] HallEffect { get; set; } =
         Enumerable.Range(0, Profiles).Select(_ => new Dictionary<HeOp, byte[]>()).ToArray();
 
-    /// <summary>macro index  raw macro buffer (up to 256 bytes).</summary>
+    /// <summary>macro index → raw macro buffer (up to 256 bytes).</summary>
     public SortedDictionary<int, byte[]> Macros { get; set; } = new();
 
     private static byte[][][] NewMatrices() =>
