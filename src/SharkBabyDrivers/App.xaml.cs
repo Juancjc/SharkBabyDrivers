@@ -53,7 +53,7 @@ public partial class App : Application
             System.Windows.MessageBox.Show(
                 english
                     ? "SharkBabyDrivers is already open. Use the existing window or close it before opening another copy. Two copies running together can prevent the keyboard from connecting."
-                    : "O SharkBabyDrivers já está aberto. Use a janela existente ou feche-a antes de abrir outra cópia. Duas cópias em execução podem impedir a conexão com o teclado.",
+                    : "O SharkBabyDrivers j� est� aberto. Use a janela existente ou feche-a antes de abrir outra c�pia. Duas c�pias em execu��o podem impedir a conex�o com o teclado.",
                 "SharkBabyDrivers", MessageBoxButton.OK, MessageBoxImage.Information);
             Shutdown();
             return;
@@ -64,7 +64,7 @@ public partial class App : Application
         base.OnStartup(e);
 
         var window = new MainWindow();
-        if (IsPreview) window.Title += " · " + Loc.T("tray_preview");
+        if (IsPreview) window.Title += " � " + Loc.T("tray_preview");
         MainWindow = window;
         _tray = new Services.TrayIcon(window, window.Vm);
         _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\SharkBabyDrivers-show-" + sid);

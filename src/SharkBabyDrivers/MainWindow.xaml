@@ -56,7 +56,7 @@
                                 <TextBlock Text="{l:T shell_connected}" FontSize="11" Foreground="{StaticResource TextSoft}"/>
                             </StackPanel>
                         </StackPanel>
-                        <TextBlock Text="{Binding FirmwareText, FallbackValue='—'}" Foreground="{StaticResource Muted}" FontSize="11" MaxWidth="230" ToolTip="{l:T firmware}"/>
+                        <TextBlock Text="{Binding FirmwareText, FallbackValue='-'}" Foreground="{StaticResource Muted}" FontSize="11" MaxWidth="230" ToolTip="{l:T firmware}"/>
                     </StackPanel>
                 </Grid>
 
