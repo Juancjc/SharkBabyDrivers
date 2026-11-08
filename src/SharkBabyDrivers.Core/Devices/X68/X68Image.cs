@@ -25,14 +25,14 @@ public sealed class X68Image
     public byte[] FnMac { get; set; } = new byte[MatrixBytes];
     public byte[][] UserPics { get; set; } = Enumerable.Range(0, 5).Select(_ => new byte[384]).ToArray();
 
-    /// <summary>[profile][sonProfile] → 512-byte key matrix.</summary>
+    /// <summary>[profile][sonProfile]  512-byte key matrix.</summary>
     public byte[][][] Keys { get; set; } = NewMatrices();
 
-    /// <summary>[profile] → op → raw table.</summary>
+    /// <summary>[profile]  op  raw table.</summary>
     public Dictionary<HeOp, byte[]>[] HallEffect { get; set; } =
         Enumerable.Range(0, Profiles).Select(_ => new Dictionary<HeOp, byte[]>()).ToArray();
 
-    /// <summary>macro index → raw macro buffer (up to 256 bytes).</summary>
+    /// <summary>macro index  raw macro buffer (up to 256 bytes).</summary>
     public SortedDictionary<int, byte[]> Macros { get; set; } = new();
 
     private static byte[][][] NewMatrices() =>
@@ -59,6 +59,18 @@ public sealed class X68Image
         c.HallEffect = HallEffect.Select(d => d.ToDictionary(kv => kv.Key, kv => (byte[])kv.Value.Clone())).ToArray();
         c.Macros = new SortedDictionary<int, byte[]>(Macros.ToDictionary(kv => kv.Key, kv => (byte[])kv.Value.Clone()));
         return c;
+    }
+
+    /// <summary>Restores only the physical active profile, retaining global settings and other profiles.</summary>
+    public X68Image WithActiveProfileRestored(X68Image original)
+    {
+        if (DeviceId != original.DeviceId) throw new InvalidDataException("Backup de outro teclado.");
+        var restored = Clone();
+        restored.Keys[ActiveProfile] = original.Keys[ActiveProfile].Select(k => k.ToArray()).ToArray();
+        if (X68Device.HeWasRead(original, ActiveProfile))
+            restored.HallEffect[ActiveProfile] = original.HallEffect[ActiveProfile]
+                .ToDictionary(k => k.Key, k => k.Value.ToArray());
+        return restored;
     }
 
     // ------------------------------------------------------------------ snapshot (backup) mapping

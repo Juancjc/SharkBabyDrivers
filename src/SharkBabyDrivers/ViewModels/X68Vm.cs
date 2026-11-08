@@ -672,7 +672,7 @@ public sealed class X68Vm : DeviceVm
     public bool WasdSwap { get => Img.WasdSwap; set { Img.WasdSwap = value; MarkDirty(); OnPropertyChanged(); } }
     public double SleepMinutes { get => Img.SleepSeconds24 / 60.0; set { Img.SleepSeconds24 = (int)Math.Round(value * 60); Img.SleepSecondsBt = Img.SleepSeconds24; MarkDirty(); OnPropertyChanged(); } }
     public double DeepSleepMinutes { get => Img.DeepSleepSeconds24 / 60.0; set { Img.DeepSleepSeconds24 = (int)Math.Round(value * 60); Img.DeepSleepSecondsBt = Img.DeepSleepSeconds24; MarkDirty(); OnPropertyChanged(); } }
-    public string FirmwareText => $"USB {Img.UsbFirmware:X4}{(Img.RfFirmware != 0 ? $" · RF {Img.RfFirmware:X4}" : "")} · id {Img.DeviceId}";
+    public string FirmwareText => $"USB {Img.UsbFirmware:X4}{(Img.RfFirmware != 0 ? $" � RF {Img.RfFirmware:X4}" : "")} � id {Img.DeviceId}";
     public string OsText => Loc.T(Img.OsMode switch { 1 => "os_mac", 2 => "os_ios", 3 => "os_android", _ => "os_win" });
 
     // ------------------------------------------------------------------ macros
@@ -739,7 +739,7 @@ public sealed class X68Vm : DeviceVm
     protected override void Annotate(DeviceSnapshot snapshot)
     {
         var img = X68Image.FromSnapshot(snapshot);
-        snapshot.Notes["summary"] = $"{img.Model.Name} · {Loc.F("kb_active_profile", img.ActiveProfile + 1)} · {img.PollingHz} Hz · {img.Macros.Count} macro(s)";
+        snapshot.Notes["summary"] = $"{img.Model.Name} � {Loc.F("kb_active_profile", img.ActiveProfile + 1)} � {img.PollingHz} Hz � {img.Macros.Count} macro(s)";
     }
 
     protected override void LoadFromSnapshot(DeviceSnapshot snapshot)
@@ -747,6 +747,21 @@ public sealed class X68Vm : DeviceVm
         _original = X68Image.FromSnapshot(snapshot);
         Img = _original.Clone();
         RebuildAll();
+    }
+
+    protected override async Task ResetFromOriginalAsync(DeviceSnapshot original, DeviceSnapshot current, bool profileOnly)
+    {
+        var before = X68Image.FromSnapshot(current);
+        var saved = X68Image.FromSnapshot(original);
+        var desired = saved;
+        if (profileOnly)
+        {
+            desired = before.WithActiveProfileRestored(saved);
+        }
+        desired.ActiveProfile = before.ActiveProfile;
+        _lighting.OnDisconnected(_kb);
+        try { await _kb.RunAsync(() => _kb.WriteImageVerified(desired, before)); }
+        finally { _lighting.OnConnected(_kb); }
     }
 
     private void RebuildAll()
@@ -823,7 +838,7 @@ public sealed class X68Vm : DeviceVm
 
     protected override void LoadProfileFile(string path)
     {
-        var snap = JsonStore.LoadOrDefault<DeviceSnapshot?>(path, () => null) ?? throw new InvalidDataException("Perfil inválido.");
+        var snap = JsonStore.LoadOrDefault<DeviceSnapshot?>(path, () => null) ?? throw new InvalidDataException("Perfil inv�lido.");
         var img = X68Image.FromSnapshot(snap);
         // Keep identity/firmware of the connected keyboard; take every setting from the file.
         img.DeviceId = Img.DeviceId; img.UsbFirmware = Img.UsbFirmware; img.RfFirmware = Img.RfFirmware;
@@ -856,7 +871,7 @@ public static class SwitchTypes
     public sealed record Info(int Id, string Name);
     public static readonly IReadOnlyList<Info> All =
     [
-        new(0, "Gateron (padrão)"), new(1, "Magnetic Jade"), new(2, "Magnetic Jade Pro"), new(3, "Magnetic Jade Gaming"),
+        new(0, "Gateron (padr�o)"), new(1, "Magnetic Jade"), new(2, "Magnetic Jade Pro"), new(3, "Magnetic Jade Gaming"),
         new(4, "Tianwang"), new(5, "Magneto"), new(6, "Kailh/Ketai"), new(8, "Magnetic White"), new(10, "Magneto Pro"),
         new(11, "Tianwang SE"), new(12, "Magneto RGB"), new(13, "Magneto POM"), new(15, "Kailh"), new(16, "TTC Magneto"),
         new(17, "Crystal White"), new(19, "Outemu"), new(29, "Cherry MX Magnetic"), new(33, "Ice Jade"),

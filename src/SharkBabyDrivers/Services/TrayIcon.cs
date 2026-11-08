@@ -115,7 +115,7 @@ public sealed class TrayIcon : IDisposable
         if (_disposed) return;
         var lighting = _vm.Lighting;
         var status = lighting.Describe();
-        var text = $"SharkBabyDrivers{(App.IsPreview ? " · " + Loc.T("tray_preview") : "")}\n{lighting.ConnectionText}\n{status}";
+        var text = $"SharkBabyDrivers{(App.IsPreview ? " � " + Loc.T("tray_preview") : "")}\n{lighting.ConnectionText}\n{status}";
         _icon.Text = text.Length > 127 ? text[..127] : text;
 
         // Owner switches are worth a notification (they happen in the background, e.g. right after sign-in).
@@ -161,6 +161,7 @@ public sealed class TrayIcon : IDisposable
             menu.Items.RemoveAt(0);
             item.Dispose();
         }
+        menu.Items.Add(Loc.I.Language == "en" ? "Check for updates" : "Verificar atualiza��es", null, async (_, _) => await ((App)System.Windows.Application.Current).Updater.CheckAsync(manual: true));
         var lighting = _vm.Lighting;
 
         menu.Items.Add(new Forms.ToolStripLabel("SharkBabyDrivers", _brandImage)
@@ -171,7 +172,7 @@ public sealed class TrayIcon : IDisposable
             ImageAlign = ContentAlignment.MiddleLeft,
             TextImageRelation = Forms.TextImageRelation.ImageBeforeText,
         });
-        var subtitle = (App.IsPreview ? Loc.T("tray_preview") + "  ·  " : "") + "v" + App.Version + "  ·  " + lighting.ConnectionText;
+        var subtitle = (App.IsPreview ? Loc.T("tray_preview") + "  �  " : "") + "v" + App.Version + "  �  " + lighting.ConnectionText;
         menu.Items.Add(new Forms.ToolStripLabel(subtitle)
         {
             ForeColor = TrayMenuRenderer.Muted,

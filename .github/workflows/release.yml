@@ -55,10 +55,10 @@ jobs:
           | Arquivo | Para quem |
           |---|---|
           | ``SharkBabyDrivers-$env:VERSION-win-x64.zip`` | Leve (~200 KB). Precisa do [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). |
-          | ``SharkBabyDrivers-$env:VERSION-win-x64-portable.zip`` | Não precisa instalar nada. |
+          | ``SharkBabyDrivers-$env:VERSION-win-x64-portable.zip`` | N�o precisa instalar nada. |
 
           Feche os programas oficiais da Attack Shark antes de abrir. Ao conectar cada dispositivo o app faz um backup
-          do que está salvo nele antes de permitir qualquer gravação.
+          do que est� salvo nele antes de permitir qualquer grava��o.
           "@
           gh release view "${{ github.ref_name }}" *> $null
           if ($LASTEXITCODE -eq 0) {

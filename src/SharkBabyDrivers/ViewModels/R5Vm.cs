@@ -19,9 +19,9 @@ public sealed class R5DpiVm(int index,int x,int y,Action changed) : ObservableOb
 }
 public sealed class R5ButtonVm(int index,byte[] original,Action changed) : ObservableObject
 {
-    public string Label => new[]{"Esquerdo","Direito","Scroll / meio","Voltar","Avançar"}[index];
+    public string Label => new[]{"Esquerdo","Direito","Scroll / meio","Voltar","Avan�ar"}[index];
     public byte[] Payload { get; private set; } = original.ToArray();
-    public IReadOnlyList<R5Choice> Choices { get; } = new[]{new R5Choice(255,"Manter atribuição atual"),new(1,"Clique esquerdo"),new(2,"Clique direito"),new(3,"Clique do meio"),new(4,"Voltar"),new(5,"Avançar"),new(16,"Rolar para cima"),new(17,"Rolar para baixo"),new(20,"Alternar DPI"),new(254,"Atalho personalizado"),new(0,"Desativar")};
+    public IReadOnlyList<R5Choice> Choices { get; } = new[]{new R5Choice(255,"Manter atribui��o atual"),new(1,"Clique esquerdo"),new(2,"Clique direito"),new(3,"Clique do meio"),new(4,"Voltar"),new(5,"Avan�ar"),new(16,"Rolar para cima"),new(17,"Rolar para baixo"),new(20,"Alternar DPI"),new(254,"Atalho personalizado"),new(0,"Desativar")};
     private byte _selected=255;
     public byte Selected { get=>_selected; set { if(value==254) { OnPropertyChanged(nameof(Selected)); return; } if(!Set(ref _selected,value)) return; Payload=value==255?original.ToArray():value==20?new byte[]{7,1,6}:value==0?new byte[]{0,0}:new byte[]{1,1,value}; OnPropertyChanged(nameof(Current)); changed(); } }
     public RelayCommand ShortcutCommand => new(() =>
@@ -33,7 +33,7 @@ public sealed class R5ButtonVm(int index,byte[] original,Action changed) : Obser
             Payload=[4,2,key.P1,key.P2];_selected=254;OnPropertyChanged(nameof(Selected));OnPropertyChanged(nameof(Current));changed();
         }
     });
-    public string Current => $"Tipo {Payload[0]} • {Convert.ToHexString(Payload.AsSpan(2))}";
+    public string Current => $"Tipo {Payload[0]}  {Convert.ToHexString(Payload.AsSpan(2))}";
 }
 public sealed class R5Vm : DeviceVm
 {
@@ -41,7 +41,7 @@ public sealed class R5Vm : DeviceVm
     public R5Vm(R5Device device) : base(device) { }
     public ObservableCollection<R5DpiVm> DpiStages { get; }=[];
     public ObservableCollection<R5ButtonVm> Buttons { get; }=[];
-    public string ProfileLabel => $"Perfil ativo {_draft.Profile} • R5 Ultra • até 42.000 DPI";
+    public string ProfileLabel => $"Perfil ativo {_draft.Profile}  R5 Ultra  at� 42.000 DPI";
     public IReadOnlyList<R5Choice> PollingChoices => (Device.Link==LinkKind.Wired
         ? new[]{new R5Choice(8,"125 Hz"),new(4,"250 Hz"),new(2,"500 Hz"),new(1,"1000 Hz")}
         : new[]{new R5Choice(8,"125 Hz"),new(4,"250 Hz"),new(2,"500 Hz"),new(1,"1000 Hz"),new(32,"2000 Hz"),new(64,"4000 Hz"),new(128,"8000 Hz")});
@@ -73,15 +73,21 @@ public sealed class R5Vm : DeviceVm
         var config=Capture(); await ((R5Device)Device).ApplyAsync(config); _baseline=config.Clone(); Load(_baseline);
     }
     protected override void DiscardChanges() => Load(_baseline);
+    protected override async Task ResetFromOriginalAsync(DeviceSnapshot original, DeviceSnapshot current, bool profileOnly)
+    {
+        var config = R5Config.FromSnapshot(original);
+        config.Profile = R5Config.FromSnapshot(current).Profile;
+        await ((R5Device)Device).ApplyAsync(config);
+    }
     protected override object CaptureProfile() => Capture();
     protected override void LoadProfileFile(string path)
     {
         var json=File.ReadAllText(path);
         using var document=JsonDocument.Parse(json);
         if(!document.RootElement.TryGetProperty("Model",out var model) || model.GetString()!=Device.Model)
-            throw new InvalidDataException("Este perfil não pertence ao R5 Ultra.");
+            throw new InvalidDataException("Este perfil n�o pertence ao R5 Ultra.");
         var config=JsonSerializer.Deserialize<R5Config>(json,JsonStore.Options)
-            ?? throw new InvalidDataException("Perfil R5 inválido.");
+            ?? throw new InvalidDataException("Perfil R5 inv�lido.");
         config.Validate(Device.Link==LinkKind.Wired);
         // A file is an editor preset; applying never switches the onboard profile.
         config.Profile=_baseline.Profile;Load(config);

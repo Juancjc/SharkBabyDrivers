@@ -71,6 +71,8 @@ public abstract class DeviceVm : ObservableObject, IDisposable
         ApplyCommand = new AsyncCommand(ApplyAsync, () => CanWrite && IsDirty);
         DiscardCommand = new RelayCommand(Discard, () => IsDirty && !Busy);
         RetryCommand = new AsyncCommand(InitializeAsync, () => !Busy);
+        ResetDeviceCommand = new AsyncCommand(() => ResetAsync(false), () => CanWrite);
+        ResetProfileCommand = new AsyncCommand(() => ResetAsync(true), () => CanWrite);
         RestoreCommand = new AsyncCommand(p => RestoreAsync(((BackupItemVm)p!).Entry.Snapshot), p => p is BackupItemVm && CanWrite);
         ExportBackupCommand = new RelayCommand(p => ExportBackup((BackupItemVm)p!), p => p is BackupItemVm);
         SaveProfileCommand = new RelayCommand(SaveProfile, () => IsReady && !Busy);
@@ -94,7 +96,7 @@ public abstract class DeviceVm : ObservableObject, IDisposable
     public string KindText => Loc.T(Device.Kind == DeviceKind.Mouse ? "kind_mouse" : "kind_keyboard");
     public string LinkText => Loc.T(Device.Link switch { LinkKind.Wired => "link_wired", LinkKind.Dongle => "link_dongle", _ => "link_bluetooth" });
     /// <summary>Segoe Fluent glyph: mouse or keyboard.</summary>
-    public string Glyph => Device.Kind == DeviceKind.Mouse ? "" : "";
+    public string Glyph => Device.Kind == DeviceKind.Mouse ? "?" : "?";
 
     public DeviceState State
     {
@@ -124,6 +126,43 @@ public abstract class DeviceVm : ObservableObject, IDisposable
     public AsyncCommand ApplyCommand { get; }
     public RelayCommand DiscardCommand { get; }
     public AsyncCommand RetryCommand { get; }
+    public AsyncCommand ResetDeviceCommand { get; }
+    public AsyncCommand ResetProfileCommand { get; }
+
+    public async Task ResetAsync(bool profileOnly, bool confirm = true)
+    {
+        if (!CanWrite) throw new InvalidOperationException(Loc.T("reset_unavailable"));
+        if (confirm && !App.Confirm(Loc.T(profileOnly ? "reset_profile_confirm" : "reset_device_confirm"))) return;
+        var snapshot = Backups.Original(Device.DeviceKey)?.Snapshot
+            ?? throw new InvalidDataException(Loc.T("reset_unavailable"));
+        Busy = true;
+        StatusText = Loc.T("applying");
+        try
+        {
+            // Keep a recovery point separate from the immutable first-connection backup.
+            var current = await Device.ReadSnapshotAsync();
+            var folder = Backups.Folder(Device.DeviceKey);
+            JsonStore.Save(Path.Combine(folder, $"before-reset-{DateTime.UtcNow:yyyyMMdd-HHmmss-fffffff}.json"), current);
+            JsonStore.Save(Path.Combine(folder, $"before-reset-profile-{DateTime.UtcNow:yyyyMMdd-HHmmss-fffffff}.json"), CaptureProfile());
+            await ResetFromOriginalAsync(snapshot, current, profileOnly);
+            await InitializeAsync();
+            if (!IsReady) throw new IOException(StatusText);
+            ShowToast(Loc.T("reset_done"));
+        }
+        catch
+        {
+            State = DeviceState.Error;
+            StatusText = Loc.T("reset_failed");
+            throw;
+        }
+        finally { Busy = false; }
+    }
+
+    protected virtual async Task ResetFromOriginalAsync(DeviceSnapshot original, DeviceSnapshot current, bool profileOnly)
+    {
+        await Device.RestoreSnapshotAsync(original);
+        await RestoreExtrasAsync(original);
+    }
     public AsyncCommand RestoreCommand { get; }
     public RelayCommand ExportBackupCommand { get; }
     public RelayCommand SaveProfileCommand { get; }

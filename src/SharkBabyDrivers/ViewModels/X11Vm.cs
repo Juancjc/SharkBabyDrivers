@@ -100,7 +100,7 @@ public sealed class ButtonVm(X11Vm owner, X11Button button) : ObservableObject
         get
         {
             var option = owner.FindOption(Button);
-            return option?.Action.IsKeyboard == true ? X11Vm.DescribeKey(option.Action) : option?.Label ?? "—";
+            return option?.Action.IsKeyboard == true ? X11Vm.DescribeKey(option.Action) : option?.Label ?? "-";
         }
     }
     public string Name => Loc.T(Button switch
@@ -314,7 +314,7 @@ public sealed class X11Vm : DeviceVm
 
     public int? Battery { get => _battery; private set { Set(ref _battery, value); OnPropertyChanged(nameof(BatteryText)); } }
     public bool Charging { get => _charging; private set { Set(ref _charging, value); OnPropertyChanged(nameof(BatteryText)); } }
-    public string BatteryText => Battery is { } b ? $"{b}%{(Charging ? " · " + Loc.T("charging") : "")}" : "—";
+    public string BatteryText => Battery is { } b ? $"{b}%{(Charging ? " � " + Loc.T("charging") : "")}" : "-";
     public string FirmwareText { get; private set; } = "";
 
     public MacroVm? SelectedMacro { get => _selectedMacro; set => Set(ref _selectedMacro, value); }
@@ -418,7 +418,7 @@ public sealed class X11Vm : DeviceVm
         // The mouse must keep at least one left click, or it becomes unusable.
         if (X11Buttons.Physical.All(b => Profile.ButtonMacros.ContainsKey((int)b) || Profile.Buttons[(int)b].ToAction() != X11Actions.Left))
         {
-            ShowToast(Loc.T("btn_left") + ": " + Loc.T("act_left_click") + " ✓");
+            ShowToast(Loc.T("btn_left") + ": " + Loc.T("act_left_click") + " V");
             Profile.Buttons[(int)X11Button.Left] = X11AppProfile.ActionDto.From(X11Actions.Left);
             Profile.ButtonMacros.Remove((int)X11Button.Left);
         }
@@ -520,7 +520,7 @@ public sealed class X11Vm : DeviceVm
             // its current state. This read also confirms the mouse is awake before write-only commands.
             var current = _mouse.ReadConfig();
             if (!lastRead.SameAs(current))
-                App.LogMessage($"X11 {Device.DeviceKey}: configuração do mouse mudou desde a última leitura. " +
+                App.LogMessage($"X11 {Device.DeviceKey}: configura��o do mouse mudou desde a �ltima leitura. " +
                     $"Anterior: {X11Device.Describe(lastRead)}. Atual: {X11Device.Describe(current)}.");
             _mouse.WriteConfig(desired, reapply ? null : current);
             if (writeButtons)
@@ -531,12 +531,12 @@ public sealed class X11Vm : DeviceVm
             var actual = _mouse.ReadConfig();
             if (!desired.SameAs(actual))
             {
-                App.LogMessage($"X11 {Device.DeviceKey}: configuração divergente após aplicar. " +
+                App.LogMessage($"X11 {Device.DeviceKey}: configura��o divergente ap�s aplicar. " +
                     $"Esperado: {X11Device.Describe(desired)}. Lido: {X11Device.Describe(actual)}.");
-                throw new IOException("O mouse não manteve as configurações após a gravação. O perfil continua salvo; acorde o mouse e tente aplicar novamente.");
+                throw new IOException("O mouse n�o manteve as configura��es ap�s a grava��o. O perfil continua salvo; acorde o mouse e tente aplicar novamente.");
             }
-            App.LogMessage($"X11 {Device.DeviceKey}: configuração conferida após aplicar " +
-                $"(perfil completo: {reapply}; botões enviados: {writeButtons}; macros enviadas: {(writeButtons ? macros.Count : 0)}). {X11Device.Describe(actual)}.");
+            App.LogMessage($"X11 {Device.DeviceKey}: configura��o conferida ap�s aplicar " +
+                $"(perfil completo: {reapply}; bot�es enviados: {writeButtons}; macros enviadas: {(writeButtons ? macros.Count : 0)}). {X11Device.Describe(actual)}.");
             return actual;
         });
         if (writeButtons) profile.ButtonsWritten = true;
@@ -594,7 +594,7 @@ public sealed class X11Vm : DeviceVm
 
     protected override void LoadProfileFile(string path)
     {
-        var p = JsonStore.LoadOrDefault<X11AppProfile?>(path, () => null) ?? throw new InvalidDataException("Perfil inválido.");
+        var p = JsonStore.LoadOrDefault<X11AppProfile?>(path, () => null) ?? throw new InvalidDataException("Perfil inv�lido.");
         if (p.Reports is { } r)
             Working = new X11Config(Convert.FromHexString(r["report_04"]), Convert.FromHexString(r["report_05"]), Convert.FromHexString(r["report_06"]));
         p.Reports = null;
@@ -615,5 +615,12 @@ public sealed class X11Vm : DeviceVm
         Profile = new X11AppProfile { ButtonsWritten = true };
         Profile.Save(Device.DeviceKey);
         await InitializeAsync();
+    }
+
+    protected override async Task ResetFromOriginalAsync(DeviceSnapshot original, DeviceSnapshot current, bool profileOnly)
+    {
+        await Device.RestoreSnapshotAsync(original);
+        await _mouse.RunAsync(() => _mouse.WriteButtons(X11Buttons.FactoryDefaults()));
+        new X11AppProfile { ButtonsWritten = true }.Save(Device.DeviceKey);
     }
 }

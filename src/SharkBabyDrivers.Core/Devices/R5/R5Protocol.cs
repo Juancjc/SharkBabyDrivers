@@ -30,11 +30,11 @@ public sealed class R5Config
             || (wired && Polling > 8) || Debounce > 30 || Lod is not (1 or 2 or 135)
             || Buttons is null || Buttons.Length != 5 || Buttons.Any(b => b is null || b.Length < 2 || b[1] > 40 || b.Length != b[1]+2)
             || !Buttons.Any(b => b.Length == 3 && b[0] == 1 && b[2] == 1))
-            throw new InvalidDataException("Configuração R5 inválida. Confira DPI (50–42000, passos de 50), polling, perfil e pelo menos um clique esquerdo.");
+            throw new InvalidDataException("Configura��o R5 inv�lida. Confira DPI (50-42000, passos de 50), polling, perfil e pelo menos um clique esquerdo.");
     }
     public static R5Config FromSnapshot(DeviceSnapshot snapshot) =>
         JsonSerializer.Deserialize<R5Config>(snapshot.Notes["r5_config"], JsonStore.Options)
-        ?? throw new InvalidDataException("Backup R5 inválido.");
+        ?? throw new InvalidDataException("Backup R5 inv�lido.");
 }
 
 public static class R5Protocol
@@ -51,7 +51,7 @@ public static class R5Protocol
     }
     public static byte[] Normalize(byte[] windowsReport)
     {
-        if (windowsReport.Length != 65 || windowsReport[0] != 0) throw new IOException("Resposta HID R5 inválida.");
+        if (windowsReport.Length != 65 || windowsReport[0] != 0) throw new IOException("Resposta HID R5 inv�lida.");
         var data = windowsReport[1..];
         if (data[0] is 0xA1 or 2) { var shifted = new byte[64]; data.AsSpan(0,63).CopyTo(shifted.AsSpan(1)); return shifted; }
         return data;

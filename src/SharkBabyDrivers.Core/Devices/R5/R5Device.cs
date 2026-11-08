@@ -59,7 +59,7 @@ public sealed class R5Device(IR5Transport transport, string key, ushort pid) : I
             var response = R5Protocol.Normalize(await Task.Run(transport.Receive,ct));
             if (R5Protocol.Matches(request,response)) return response;
         }
-        throw new DeviceAsleepException("O R5 não respondeu ao comando. Mova ou clique no mouse e tente novamente.");
+        throw new DeviceAsleepException("O R5 n�o respondeu ao comando. Mova ou clique no mouse e tente novamente.");
     }
     private async Task<DeviceSnapshot> ReadCore(IProgress<string>? progress, CancellationToken ct)
     {
@@ -74,11 +74,11 @@ public sealed class R5Device(IR5Transport transport, string key, ushort pid) : I
         var fw=await Read("firmware",16,0,0x81);
         snapshot.Firmware=string.Join(".",fw.Skip(7).Take(4));
         var profile=(await Read("profile",1,0,0x85))[7];
-        if (profile is <1 or >3) throw new InvalidDataException("Perfil R5 inválido.");
+        if (profile is <1 or >3) throw new InvalidDataException("Perfil R5 inv�lido.");
         var config=new R5Config { Profile=profile };
         var dpi=await Read("dpi",10,1,0x81,profile,6);
         var count=dpi[8];
-        if (count is <1 or >6) throw new InvalidDataException("Estágios DPI R5 inválidos.");
+        if (count is <1 or >6) throw new InvalidDataException("Est�gios DPI R5 inv�lidos.");
         config.Dpi=Enumerable.Range(0,count).Select(i=>(dpi[9+i*4]<<8)|dpi[10+i*4]).ToArray();
         config.DpiY=Enumerable.Range(0,count).Select(i=>(dpi[11+i*4]<<8)|dpi[12+i*4]).ToArray();
         async Task<byte> Value(string name,byte group,byte command) => (await Read(name,2,group,command,profile))[8];
@@ -97,13 +97,13 @@ public sealed class R5Device(IR5Transport transport, string key, ushort pid) : I
         {
             var response=await Read($"button_{button}",15,3,0x80,profile,button,0,255,10);
             if(response[7]!=profile || response[8]!=button || response[11]>40)
-                throw new InvalidDataException("Resposta de botão R5 inválida.");
+                throw new InvalidDataException("Resposta de bot�o R5 inv�lida.");
             config.Buttons[button-1]=new[]{response[10],response[11]}.Concat(response.Skip(12).Take(response[11])).ToArray();
         }
         config.Validate(Link==LinkKind.Wired);
         snapshot.Notes["r5_config"]=JsonSerializer.Serialize(config,JsonStore.Options);
-        snapshot.Notes["summary"]=$"Perfil {profile} • {count} estágios DPI • firmware {snapshot.Firmware}";
-        snapshot.Notes["scope"]="Perfil ativo: DPI, sensor, polling, suspensão e botões. Dados de macros e cores DPI não são incluídos; permanecem no dispositivo.";
+        snapshot.Notes["summary"]=$"Perfil {profile}  {count} est�gios DPI  firmware {snapshot.Firmware}";
+        snapshot.Notes["scope"]="Perfil ativo: DPI, sensor, polling, suspens�o e bot�es. Dados de macros e cores DPI n�o s�o inclu�dos; permanecem no dispositivo.";
         return snapshot;
     }
     public async Task ApplyAsync(R5Config desired, CancellationToken ct=default)
@@ -116,11 +116,11 @@ public sealed class R5Device(IR5Transport transport, string key, ushort pid) : I
             if(before.Profile!=desired.Profile) throw new InvalidOperationException("O perfil ativo mudou. Releia o R5 antes de aplicar.");
             for(int i=0;i<5;i++)
                 if(!before.Buttons[i].SequenceEqual(desired.Buttons[i]) && desired.Buttons[i][0] is 16 or 17 or 18)
-                    throw new NotSupportedException("Transferência de macros R5 ainda não disponível.");
+                    throw new NotSupportedException("Transfer�ncia de macros R5 ainda n�o dispon�vel.");
             async Task Set(byte len,byte group,byte command,params byte[] data)
             {
                 var response=await Exchange(R5Protocol.Frame(len,group,command,data),ct);
-                if(response[7]!=desired.Profile) throw new IOException("Confirmação de perfil R5 inválida.");
+                if(response[7]!=desired.Profile) throw new IOException("Confirma��o de perfil R5 inv�lida.");
             }
             async Task Scalar(byte group,byte command,byte oldValue,byte newValue)
             { if(oldValue!=newValue) await Set(2,group,command,desired.Profile,newValue); }
@@ -144,12 +144,12 @@ public sealed class R5Device(IR5Transport transport, string key, ushort pid) : I
                 if(!before.Buttons[i].SequenceEqual(desired.Buttons[i]))
                 {
                     var b=desired.Buttons[i];
-                    if(b[0] is 16 or 17 or 18) throw new NotSupportedException("Macros R5 só podem ser preservadas no próprio dispositivo; criar ou transferir macros ainda não está disponível.");
+                    if(b[0] is 16 or 17 or 18) throw new NotSupportedException("Macros R5 s� podem ser preservadas no pr�prio dispositivo; criar ou transferir macros ainda n�o est� dispon�vel.");
                     await Set((byte)(5+b[1]),3,0,new byte[]{desired.Profile,(byte)(i+1),0,b[0],b[1]}.Concat(b.Skip(2)).ToArray());
                 }
             var after=R5Config.FromSnapshot(await ReadCore(null,ct));
             if(JsonSerializer.Serialize(after)!=JsonSerializer.Serialize(desired))
-                throw new IOException("O R5 não confirmou todos os ajustes. O rascunho foi mantido; releia ou tente aplicar novamente.");
+                throw new IOException("O R5 n�o confirmou todos os ajustes. O rascunho foi mantido; releia ou tente aplicar novamente.");
         }
         finally { _queue.Release(); }
     }

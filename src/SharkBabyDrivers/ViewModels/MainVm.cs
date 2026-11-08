@@ -30,6 +30,7 @@ public sealed class MainVm : ObservableObject, IDisposable
     public ObservableCollection<DeviceVm> Devices { get; } = new();
     public IReadOnlyList<Choice<string>> Languages { get; } = Loc.Languages.Select(l => new Choice<string>(l.Code, "", () => l.Name)).ToList();
     public RelayCommand RefreshCommand { get; }
+    public AsyncCommand ResetAllCommand { get; }
     public RelayCommand OpenBackupsCommand { get; }
     public string Version => App.Version;
 
@@ -41,6 +42,18 @@ public sealed class MainVm : ObservableObject, IDisposable
         _manager.Disconnected += d => Ui.Post(() => OnDisconnected(d));
         _manager.OpenFailed += (model, ex) => App.Log(new IOException($"{model}: {ex.Message}", ex));
         RefreshCommand = new RelayCommand(RequestRefresh);
+        ResetAllCommand = new AsyncCommand(async () =>
+        {
+            var targets = Devices.ToArray();
+            if (!App.Confirm(Loc.T("reset_all_confirm"))) return;
+            var failures = new List<string>();
+            foreach (var device in targets)
+            {
+                try { await device.ResetAsync(false, confirm: false); }
+                catch (Exception ex) { App.Log(ex); failures.Add($"{device.Title}: {ex.Message}"); }
+            }
+            if (failures.Count > 0) throw new IOException(string.Join(Environment.NewLine, failures));
+        }, () => Devices.Count > 0 && Devices.All(d => d.CanWrite));
         OpenBackupsCommand = new RelayCommand(() =>
         {
             Directory.CreateDirectory(AppPaths.Backups);
