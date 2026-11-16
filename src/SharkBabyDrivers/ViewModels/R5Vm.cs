@@ -10,16 +10,22 @@ using SharkBabyDrivers.Core.Devices.X11;
 namespace SharkBabyDrivers.ViewModels;
 
 public sealed record R5Choice(byte Value,string Label);
-public sealed class R5DpiVm(int index,int x,int y,Action changed) : ObservableObject
+public sealed class R5DpiVm(int index,int x,int y,Action changed,Action<byte> activate) : ObservableObject
 {
     private int _x=x,_y=y;
+    private bool _linked=x==y,_isActive;
     public string Label => $"DPI {index+1}";
-    public int X { get=>_x; set { if(Set(ref _x,value)) changed(); } }
-    public int Y { get=>_y; set { if(Set(ref _y,value)) changed(); } }
+    public int X { get=>_x; set { if(Set(ref _x,value)) { if(_linked) { _y=value; OnPropertyChanged(nameof(Y)); } changed(); } } }
+    public int Y { get=>_y; set { if(Set(ref _y,value)) { if(_linked) { _x=value; OnPropertyChanged(nameof(X)); } changed(); } } }
+    public bool Linked { get=>_linked; set { if(Set(ref _linked,value) && value) { Y=X; } } }
+    public bool IsActive { get=>_isActive; set { if(value && !_isActive) activate((byte)(index+1)); } }
+    public void SetActive(byte active) { if(Set(ref _isActive,active==index+1,nameof(IsActive))) OnPropertyChanged(nameof(ActiveLabel)); }
+    public string ActiveLabel => _isActive ? "Em uso" : "Usar estágio";
 }
 public sealed class R5ButtonVm(int index,byte[] original,Action changed) : ObservableObject
 {
     public string Label => new[]{"Esquerdo","Direito","Scroll / meio","Voltar","Avançar"}[index];
+    public string NumberedLabel => $"{index + 1} · {Label}";
     public byte[] Payload { get; private set; } = original.ToArray();
     public IReadOnlyList<R5Choice> Choices { get; } = new[]{new R5Choice(255,"Manter atribuição atual"),new(1,"Clique esquerdo"),new(2,"Clique direito"),new(3,"Clique do meio"),new(4,"Voltar"),new(5,"Avançar"),new(16,"Rolar para cima"),new(17,"Rolar para baixo"),new(20,"Alternar DPI"),new(254,"Atalho personalizado"),new(0,"Desativar")};
     private byte _selected=255;
@@ -48,7 +54,12 @@ public sealed class R5Vm : DeviceVm
     public IReadOnlyList<R5Choice> LodChoices { get; }=[new(135,"0,7 mm"),new(1,"1 mm"),new(2,"2 mm")];
     public byte Polling { get=>_draft.Polling; set { _draft.Polling=value; MarkDirty(); } }
     public byte Lod { get=>_draft.Lod; set { _draft.Lod=value; MarkDirty(); } }
-    public byte ActiveDpi { get=>_draft.ActiveDpi; set { _draft.ActiveDpi=value; MarkDirty(); } }
+    public byte ActiveDpi { get=>_draft.ActiveDpi; set {
+        if(_draft.ActiveDpi==value) return;
+        _draft.ActiveDpi=value;
+        foreach(var stage in DpiStages) stage.SetActive(value);
+        OnPropertyChanged(); MarkDirty();
+    } }
     public byte Debounce { get=>_draft.Debounce; set { _draft.Debounce=value; MarkDirty(); } }
     public ushort SleepSeconds { get=>_draft.SleepSeconds; set { _draft.SleepSeconds=value; MarkDirty(); } }
     public bool AngleSnap { get=>_draft.AngleSnap; set { _draft.AngleSnap=value; MarkDirty(); } }
@@ -58,8 +69,9 @@ public sealed class R5Vm : DeviceVm
     private void Load(R5Config config)
     {
         _draft=config.Clone(); DpiStages.Clear(); Buttons.Clear();
-        for(int i=0;i<_draft.Dpi.Length;i++) DpiStages.Add(new R5DpiVm(i,_draft.Dpi[i],_draft.DpiY[i],MarkDirty));
+        for(int i=0;i<_draft.Dpi.Length;i++) DpiStages.Add(new R5DpiVm(i,_draft.Dpi[i],_draft.DpiY[i],MarkDirty,active=>ActiveDpi=active));
         for(int i=0;i<5;i++) Buttons.Add(new R5ButtonVm(i,_draft.Buttons[i],MarkDirty));
+        foreach(var stage in DpiStages) stage.SetActive(_draft.ActiveDpi);
         RefreshAll();
     }
     private R5Config Capture()

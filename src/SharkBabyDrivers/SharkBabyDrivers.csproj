@@ -27,6 +27,7 @@
   <ItemGroup>
     <Resource Include="Assets\icon.ico" />
     <Resource Include="Assets\logo.png" />
+    <Resource Include="Assets\r5-ultra-transparent.png" />
   </ItemGroup>
 
 </Project>
