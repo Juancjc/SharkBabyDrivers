@@ -453,6 +453,16 @@
                 <StackPanel>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
+                            <TextBlock Text="{l:T firmware}" Style="{StaticResource H2}"/>
+                            <TextBlock Text="{Binding FirmwareText}" Style="{StaticResource Hint}"/>
+                            <Button Content="{l:T kb_fw_check}" Command="{Binding CheckFirmwareCommand}"
+                                    HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                            <TextBlock Text="{Binding FirmwareCatalogStatus}" Style="{StaticResource Hint}"
+                                       TextWrapping="Wrap" Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
                             <TextBlock Text="{l:T polling_title}" Style="{StaticResource H2}"/>
                             <TextBlock Text="{l:T kb_polling_hint}" Style="{StaticResource Hint}" Margin="0,0,0,10"/>
                             <ItemsControl ItemsSource="{Binding PollingChoices}">

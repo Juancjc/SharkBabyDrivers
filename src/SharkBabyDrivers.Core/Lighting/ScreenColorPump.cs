@@ -19,6 +19,7 @@ public sealed class ScreenColorPump : IDisposable
 {
     public const int FrameMs = 33;       // at most ~30 colours per second
     public const int RefreshMs = 2000;
+    private const int MaxChannelStep = 48;
 
     private readonly X68Device _device;
     private readonly SignalRgbBridge _bridge;
@@ -93,6 +94,8 @@ public sealed class ScreenColorPump : IDisposable
                 }
                 if (_bridge.LatestFor(_device.ProductId, now) is not { } f) continue;
                 var color = (f.R, f.G, f.B);
+                if (!f.Shutdown && _sent is { } previous)
+                    color = StepTowards(previous, color);
                 if (_sent == color && now - LastSentAt < RefreshMs) continue;
                 await _device.RunAsync(() =>
                 {
@@ -111,6 +114,22 @@ public sealed class ScreenColorPump : IDisposable
                 try { await Task.Delay(1000, token).ConfigureAwait(false); } catch (OperationCanceledException) { break; }
             }
         }
+    }
+
+    private static (byte R, byte G, byte B) StepTowards(
+        (byte R, byte G, byte B) previous, (byte R, byte G, byte B) target)
+    {
+        var red = target.R - previous.R;
+        var green = target.G - previous.G;
+        var blue = target.B - previous.B;
+        var distance = Math.Max(Math.Abs(red), Math.Max(Math.Abs(green), Math.Abs(blue)));
+        if (distance <= MaxChannelStep) return target;
+
+        // Limit abrupt jumps while preserving the direction of the RGB transition.
+        var fraction = (double)MaxChannelStep / distance;
+        return ((byte)Math.Round(previous.R + red * fraction),
+                (byte)Math.Round(previous.G + green * fraction),
+                (byte)Math.Round(previous.B + blue * fraction));
     }
 
     public void Dispose()

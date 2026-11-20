@@ -1,5 +1,42 @@
 # SignalRGB integration (X68 PRO HE)
 
+## X68 Pro HE V2 firmware investigation (2026-11-20)
+
+The test device reported model ID `2901`, USB PID `3151:502F` and firmware `0x0505`
+(`ID2901_V505` in [GearHub v4](https://qmk.top/v4/)). GearHub's IoT helper
+(`iot_manager_rs.exe` and `common_hid_rs.exe`) is separate from the keyboard firmware.
+SharkBabyDrivers communicates with the keyboard directly over HID.
+
+* **Firmware catalog.** In X68 → Performance → Check official firmware, the app sends the detected
+  model ID to the same RongYuan catalog as GearHub. For `2901` the server returned HTTP 500 with
+  `Record not found`. The app distinguishes this response from a failed lookup. A catalog entry
+  would display its published version string. The check performs no firmware installation.
+* **Dynamic RGB.** Version 0.0.11 recognized the wired keyboard as `X68PRO HE` on its Device channel.
+  Its installed code sends RGB frames over HID using command `0x0F` in pages of 56 bytes.
+  The 64-byte payload starts with `0F 01 page 38 final 00 00 checksum`, followed by RGB bytes.
+  The checksum is the complement of the sum of the first seven payload bytes.
+  The setup package had no identified X68 firmware image.
+* **USB test.** A standalone probe verified `2901` / `0x0505`, then sent one 21 × 6 RGB frame
+  split between pink and blue in seven reports. SharkBabyDrivers was paused during the test.
+  The `0x94` query returned `94 00 00 00 00 00 00 6B 00`. The `0x87` lighting readback matched before
+  and after, and no busy/idle events were observed. The user reported seeing only the existing
+  blue drops effect. USB delivery succeeded, while visible RGB per key via `0x0F` remains unconfirmed.
+  The production integration does not send `0x0F`.
+* **Current behavior.** The Neon preset in Neon Sunset Wave can be classified as a rainbow wave
+  in Keyboard effects mode. Live colour only follows the scene palette as one colour across the
+  board. The driver limits large RGB jumps by sending intermediate colours over `0x0E` at its
+  normal frame rate. Shutdown colours still apply immediately. Tray notifications announce actual
+  lighting-owner changes once; refreshing the same owner or changing effects updates the status
+  without a Windows notification.
+
+A firmware port needs the original `2901` image or verified PCB information. The
+[MonsGeek patch](https://github.com/echtzeit-solutions/monsgeek-akko-linux/tree/master/firmwares/2949-v408/patch)
+uses firmware-specific hook addresses and RAM allocations. The
+[open RY5088 reference firmware](https://github.com/dot-agi/ry5088-flasher/tree/main/firmware)
+has a FUN60 Ultra profile. The X68's Hall sensor wiring, LED data pin and physical LED chain order
+still need to be verified for a replacement build. The existing JSON configuration backups do not
+contain the firmware. Confirm the stock recovery procedure before flashing a test image.
+
 Measured on 2026-11-01 with an X68 V2 (id 2901, USB fw 0x0505) through the receiver `3151:5026` and the cable
 `3151:502F`, SignalRGB 2.5.84, a webcam aimed at the keyboard (mean RGB of the keyboard area, 30 fps).
 
@@ -51,7 +88,7 @@ SignalRGB effect ─► plugin (integrations/signalrgb) ─UDP 127.0.0.1:47851�
   the keyboard keeps its last colour.
 * With SharkBabyDrivers in control, SignalRGB keeps its (idle) HID handle and the plugin keeps sending UDP to
   localhost; the keyboard receives nothing. Disabling the device in SignalRGB stops that too.
-* One colour for the whole keyboard (`0x0E` has no per-key form on this firmware). Per-key colour exists only as
+* The validated live integration sends one colour for the whole keyboard (`0x0E`). The validated per-key path is
   the LED pictures `0x0C`, which are stored in flash (7 packets per picture) — streaming them per frame would bring
   back the flicker and the flash wear. Per-key streaming (`0xE8` in the monsgeek project) needs patched firmware.
 * Over the receiver, ~15–20 colours/s reach the keyboard (each relayed write waits for the RF link);
@@ -60,14 +97,15 @@ SignalRGB effect ─► plugin (integrations/signalrgb) ─UDP 127.0.0.1:47851�
 ## Per-key colour: what the stock firmware can and cannot do (diagnosed 2026-11-01)
 
 Question: can SignalRGB effects with several colours at once (background X + wave Y) be shown key by key, live?
-**Not on the stock firmware (id 2901, fw 0x0505).** Evidence, all without sending anything to the keyboard:
+**No verified live per-key path on the tested stock firmware (id 2901, fw 0x0505).** The table summarizes the
+original findings. The November 20 investigation above records the subsequent `0x0F` test:
 
 | Kind | Command | Stored? | Live? | Evidence |
 |---|---|---|---|---|
 | 1. Global colour, live | mode 21 + `0x0E` R,G,B | no | **yes** (one colour, whole keyboard) | measured: no busy events, no flicker |
 | 2. Static multi-colour picture | `0x0C` SET_USERPIC (5 slots, 7 pages × 56 B, matrix order) + mode 13 | **flash** | no | official app `_setLightPic` + `vendorSleep`; RY5088 flash map has "User Pictures / LEDs" at 0x0802F800 |
 | 3. Per-key animation upload | `0x12` SET_USERGIF (start, then frames with `frameNum`/`frameDelay`) | **flash** (300 ms erase wait after start) | no — the firmware plays the uploaded loop | official app `setUserGifStart`/`setUserGif`; not offered for the X68 (mode 25 absent from its light layout) — never sent |
-| Per-key live streaming | — | — | **does not exist** | official `iot_driver` streams only `Music2` (`0x0D` band levels) and `Screen` (`0x0E`); the monsgeek project, which disassembled RY5088 firmware, had to **add** `0xE8 LED_STREAM` in a patched firmware, and its tools refuse stock firmware |
+| Per-key live streaming | `0x0F` candidate | unknown | **unconfirmed** | Dynamic RGB sends this command; the USB test above did not show both colours. The MonsGeek project implements a separate `0xE8 LED_STREAM` command in patched firmware |
 
 So the single zone in the chain (plugin `Size [1,1]` → `RgbFrame` with one RGB → `ScreenColorPump` → `0x0E`) is not
 what limits the effect: there is no command that would apply more colours live. Sending more zones would have
@@ -113,7 +151,7 @@ layout and written on request to a user-picture slot — not an animation.
 
 ## Keyboard effects imitating SignalRGB (2026-11-02)
 
-The stock firmware has only two live paths: `0x0E` (one colour for every key) and `0x0D` (music bars in the
+The original investigation identified two live paths: `0x0E` (one colour for every key) and `0x0D` (music bars in the
 firmware's own rainbow). Several colours with movement exist only as the firmware's own effects, which are set with
 `0x07` (stored in flash). So, with the style **Keyboard effects** (default; *Live colour only* keeps the old
 behaviour), SharkBabyDrivers reads SignalRGB's scene (per-key colours, 10/s since plugin 1.3.0, last 3 s) and picks

@@ -93,6 +93,28 @@ public class SignalRgbLightingTests
     }
 
     [Fact]
+    public async Task Live_colour_smooths_large_jumps_and_applies_shutdown_immediately()
+    {
+        var (sim, dev) = Create();
+        using var bridge = new SignalRgbBridge();
+        using var pump = new ScreenColorPump(dev, bridge) { Active = true };
+        bridge.Accept(new RgbFrame(dev.ProductId, 255, 0, 0, false, Environment.TickCount64));
+        await WaitFor(() => pump.LastSent == (255, 0, 0));
+
+        bridge.Accept(new RgbFrame(dev.ProductId, 0, 0, 255, false, Environment.TickCount64));
+        await WaitFor(() => pump.LastSent == (0, 0, 255));
+
+        bridge.Accept(new RgbFrame(dev.ProductId, 0, 0, 0, true, Environment.TickCount64));
+        await WaitFor(() => pump.LastSent == (0, 0, 0));
+        var colors = sim.Sent.Where(p => p[0] == SetScreenColor).Select(p => (p[1], p[2], p[3])).ToArray();
+        Assert.Equal(new (byte, byte, byte)[]
+        {
+            (255, 0, 0), (207, 0, 48), (159, 0, 96), (111, 0, 144),
+            (63, 0, 192), (15, 0, 240), (0, 0, 255), (0, 0, 0)
+        }, colors);
+    }
+
+    [Fact]
     public async Task Idle_light_off_goes_dark_once_and_a_key_press_brings_the_colour_back()
     {
         var (sim, dev) = Create();

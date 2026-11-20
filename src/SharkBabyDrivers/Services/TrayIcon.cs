@@ -27,7 +27,7 @@ public sealed class TrayIcon : IDisposable
     private Icon? _drawn;
     private string _drawnKey = "";
     private bool _hintShown;
-    private string _lastState = "";
+    private string? _lastLightingOwner;
     private int _ticks;
     private bool _disposed;
 
@@ -118,10 +118,14 @@ public sealed class TrayIcon : IDisposable
         var text = $"SharkBabyDrivers{(App.IsPreview ? " · " + Loc.T("tray_preview") : "")}\n{lighting.ConnectionText}\n{status}";
         _icon.Text = text.Length > 127 ? text[..127] : text;
 
-        // Owner switches are worth a notification (they happen in the background, e.g. right after sign-in).
-        if (lighting.State is "signal" or "app" && _lastState is "switching_to_signal" or "switching_to_app")
-            _icon.ShowBalloonTip(3000, "SharkBabyDrivers", status, Forms.ToolTipIcon.Info);
-        _lastState = lighting.State;
+        // Reapplying lighting for the same owner also passes through the switching states.
+        if (lighting.State is "signal" or "app" && lighting.State != _lastLightingOwner)
+        {
+            var previousOwner = _lastLightingOwner;
+            _lastLightingOwner = lighting.State;
+            if (previousOwner is not null)
+                _icon.ShowBalloonTip(3000, "SharkBabyDrivers", status, Forms.ToolTipIcon.Info);
+        }
 
         Color? dot = null;
         if (lighting.SignalRgbOwns)

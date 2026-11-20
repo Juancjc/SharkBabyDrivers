@@ -135,6 +135,7 @@ public sealed class X68Vm : DeviceVm
     public AsyncCommand FactoryResetCommand { get; }
     public RelayCommand InstallSignalRgbPluginCommand { get; }
     public AsyncCommand CaptureStaticPictureCommand { get; }
+    public AsyncCommand CheckFirmwareCommand { get; }
 
     // ------------------------------------------------------------------ static picture from SignalRGB
 
@@ -257,6 +258,7 @@ public sealed class X68Vm : DeviceVm
         _lighting.LedChanged += OnLightingLed;
         _lighting.UserPicChanged += OnUserPicStored;
         CaptureStaticPictureCommand = new AsyncCommand(CaptureStaticPictureAsync, () => CanWrite && !App.IsPreview);
+        CheckFirmwareCommand = new AsyncCommand(CheckFirmwareAsync, () => Img.DeviceId > 0 && !App.IsPreview);
         _lightingTimer.Tick += (_, _) => OnLightingChanged();
         _lightingTimer.Start();
         InstallSignalRgbPluginCommand = new RelayCommand(InstallSignalRgbPlugin, () => !App.IsPreview);
@@ -673,6 +675,30 @@ public sealed class X68Vm : DeviceVm
     public double SleepMinutes { get => Img.SleepSeconds24 / 60.0; set { Img.SleepSeconds24 = (int)Math.Round(value * 60); Img.SleepSecondsBt = Img.SleepSeconds24; MarkDirty(); OnPropertyChanged(); } }
     public double DeepSleepMinutes { get => Img.DeepSleepSeconds24 / 60.0; set { Img.DeepSleepSeconds24 = (int)Math.Round(value * 60); Img.DeepSleepSecondsBt = Img.DeepSleepSeconds24; MarkDirty(); OnPropertyChanged(); } }
     public string FirmwareText => $"USB {Img.UsbFirmware:X4}{(Img.RfFirmware != 0 ? $" · RF {Img.RfFirmware:X4}" : "")} · id {Img.DeviceId}";
+
+    private string _firmwareCatalogStatus = "";
+    public string FirmwareCatalogStatus
+    {
+        get => _firmwareCatalogStatus;
+        private set => Set(ref _firmwareCatalogStatus, value);
+    }
+
+    private async Task CheckFirmwareAsync()
+    {
+        var deviceId = Img.DeviceId;
+        FirmwareCatalogStatus = Loc.T("kb_fw_checking");
+        try
+        {
+            var version = await X68FirmwareCatalog.GetPublishedVersionAsync(deviceId);
+            FirmwareCatalogStatus = version is null
+                ? Loc.F("kb_fw_missing", deviceId)
+                : Loc.F("kb_fw_published", deviceId, version);
+        }
+        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or OperationCanceledException or System.Text.Json.JsonException)
+        {
+            FirmwareCatalogStatus = Loc.T("kb_fw_error");
+        }
+    }
     public string OsText => Loc.T(Img.OsMode switch { 1 => "os_mac", 2 => "os_ios", 3 => "os_android", _ => "os_win" });
 
     // ------------------------------------------------------------------ macros
